@@ -95,6 +95,9 @@ function wireGame() {
           audio.play('combo')
         }
         break
+      case 'roundstart':
+        if (!game!.attract) ui.banner(`ROUND ${data.round}`, 1.4)
+        break
       case 'battleover':
         if (game!.attract) {
           window.setTimeout(startAttract, 1500)

@@ -782,6 +782,7 @@ export class Game {
     }
     this.state = 'playing'
     this.particles.clear()
+    this.emit('roundstart', { round: this.round, roundWins: [...this.roundWins] })
   }
 
   // ---------------- main update ----------------
