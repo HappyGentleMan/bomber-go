@@ -3,9 +3,9 @@ import { Renderer } from './render'
 import { ui } from './ui'
 import { input } from './input'
 import { audio } from './audio'
-import { CANVAS_W, CANVAS_H } from './constants'
+import { CANVAS_W, CANVAS_H, POWERUP_DEFS } from './constants'
 import { isHighScore } from './storage'
-import type { Dir } from './constants'
+import type { Dir, PowerupKind } from './constants'
 
 const stage = document.getElementById('stage')!
 const canvas = document.getElementById('game') as HTMLCanvasElement
@@ -16,6 +16,32 @@ let game: Game | null = null
 let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
 let lastTickSecond = -1
+
+// ---------- powerup legend (settings screen) ----------
+{
+  const PU_DESC: Record<PowerupKind, string> = {
+    bomb: 'one more bomb at a time',
+    flame: 'longer bomb blast',
+    speed: 'move faster',
+    shrink: 'lose a bomb slot',
+    shrinkf: 'shorter blast',
+    shield: 'blocks one hit',
+    invincible: 'untouchable for a while',
+    wallpass: 'walk through bricks',
+    freeze: 'freezes enemies — battle: stuns the rival',
+    kick: 'kick bombs further',
+    life: '+1 life',
+  }
+  const legend = document.getElementById('powerup-legend')
+  if (legend) {
+    legend.innerHTML = Object.values(POWERUP_DEFS).map(d =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+         <span style="width:16px;height:16px;border-radius:50%;background:${d.color};flex-shrink:0;box-shadow:0 0 8px ${d.color}66"></span>
+         <span style="font-size:12px"><b style="letter-spacing:.05em">${d.label}</b> <span class="hint" style="font-size:11px">— ${PU_DESC[d.kind]}</span></span>
+       </div>`
+    ).join('')
+  }
+}
 
 // ---------- layout ----------
 
