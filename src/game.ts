@@ -884,13 +884,24 @@ export class Game {
     const myBombs = this.bombs.filter(b => b.owner === p.id)
     if (enemy) {
       const distEnemy = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
-      if (distEnemy <= p.flame + 1 && !this.bombAt(p.col, p.row)
-        && myBombs.length < p.bombs && this.blastEscape(p)) {
+      const inLine = enemy.col === p.col || enemy.row === p.row
+      const canBomb = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)
+      // trap: opponent hemmed into a dead-end on our line — bomb to cut the exit
+      if (inLine && distEnemy >= 1 && distEnemy <= p.flame
+        && this.openNeighbors(enemy.col, enemy.row) <= 1 && canBomb) {
         out.bomb = true
+      } else if (distEnemy >= 2 && distEnemy <= p.flame + 1 && canBomb
+        && Math.random() < 0.85) { // reaction jitter: break perfect symmetry
+        out.bomb = true
+      } else if (inLine && distEnemy >= 1 && distEnemy <= p.flame - 1 && canBomb) {
+        // cut: blast a brick behind the opponent to shrink their escape routes
+        const sdc = Math.sign(enemy.col - p.col), sdr = Math.sign(enemy.row - p.row)
+        if (this.tile(enemy.col + sdc, enemy.row + sdr) === T_SOFT) out.bomb = true
       }
       if (myBombs.length) {
         const b = myBombs.sort((a, b) => a.born - b.born)[0]
-        if (this.bombHits(b, enemy.col, enemy.row)) out.detonate = true
+        // early-detonate only when it won't also kill us
+        if (this.bombHits(b, enemy.col, enemy.row) && !this.bombHits(b, p.col, p.row)) out.detonate = true
       }
     } else if (nearest) {
       // campaign: bomb any enemy lined up within flame range
@@ -921,7 +932,39 @@ export class Game {
     let st = this.aiState.get(p.id)
     if (!st || this.time > st.repath) {
       let target: { c: number; r: number }
-      if (this.mode === 'campaign' && !nearest) {
+      if (enemy) {
+        // battle: hunt the opponent
+        target = { c: enemy.col, r: enemy.row }
+        if (!out.bomb && nearestD < 2) {
+          // point-blank: back off — a bomb here is a mutual kill
+          if (nearestD === 0) {
+            // sharing a tile: step to a random open neighbour
+            const opts: [number, number][] = []
+            for (const [dc, dr] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+              const cc = p.col + dc, rr = p.row + dr
+              if (this.canEnter(p, cc, rr)) opts.push([cc, rr])
+            }
+            const o = opts[Math.floor(Math.random() * opts.length)]
+            target = o ? { c: o[0], r: o[1] } : { c: enemy.col, r: enemy.row }
+          } else {
+            target = {
+              c: Math.max(1, Math.min(COLS - 2, p.col + (p.col - enemy.col) * 2)),
+              r: Math.max(1, Math.min(ROWS - 2, p.row + (p.row - enemy.row) * 2)),
+            }
+          }
+        } else if (nearestD > 6) {
+          // far away: detour for a nearby powerup (flame first — longer flame = kills)
+          let best = 99, bestPrio = 9
+          for (const u of this.powerups) {
+            const d = Math.abs(u.col - p.col) + Math.abs(u.row - p.row)
+            if (d >= 8) continue
+            const prio = (u.kind === 'flame' && p.flame < 3) ? 0 : 1
+            if (prio < bestPrio || (prio === bestPrio && d < best)) {
+              bestPrio = prio; best = d; target = { c: u.col, r: u.row }
+            }
+          }
+        }
+      } else if (this.mode === 'campaign' && !nearest) {
         target = { c: this.exit.col, r: this.exit.row }
       } else {
         // priority: flame (can't kill with weak flame) > bomb > other powerup >
@@ -957,9 +1000,10 @@ export class Game {
       } else {
         out.dir = nd
       }
-    } else if (this.time > st.repath) {
+    } else {
+      // no usable path (target unreachable): wander until the next repath
       out.dir = Math.floor(Math.random() * 4) as Dir
-      st.repath = this.time + 0.3
+      st.repath = Math.max(st.repath, this.time + 0.3)
     }
     return out
   }
@@ -1010,13 +1054,19 @@ export class Game {
         if (best) return best
       }
     }
-    // on fire / about to be on fire: get out
+    // on fire / about to be on fire: get out. Blast tiles may be crossed on
+    // the way out (they're only fatal at detonation) — score destinations by
+    // how far outside the blast and how open they are
     if (soon.has(key(p.col, p.row)) || soon.has(key(p.col + dc, p.row + dr))) {
-      let best: Dir | null = null, bestScore = -1
+      let best: Dir | null = null, bestScore = -Infinity
       for (const q of [2, 3, 0, 1] as Dir[]) {
-        if (!safe(q)) continue
         const [c2, r2] = dirVec(q)
-        const s = (p.col + c2 === p.col + dc && p.row + r2 === p.row + dr) ? 0 : 1
+        const nc = p.col + c2, nr = p.row + r2
+        if (!this.canEnter(p, nc, nr)) continue
+        let s = 0
+        if (!soon.has(key(nc, nr))) s += 4
+        if (nc === p.col + dc && nr === p.row + dr) s += 2
+        s += this.openNeighbors(nc, nr) * 0.5
         if (s > bestScore) { bestScore = s; best = q }
       }
       if (best) return best
@@ -1053,8 +1103,9 @@ export class Game {
     return n
   }
 
-  /** true if, after placing a bomb on p's tile, at least one adjacent tile
-   *  stays outside the blast — otherwise the bomb is a self-destruct */
+  /** true if, after placing a bomb on p's tile, p can walk to a tile outside
+   *  the blast before the fuse runs out (blast tiles may be crossed early —
+   *  they're only fatal at detonation) */
   private blastEscape(p: PlayerState): boolean {
     const c = p.col, r = p.row, pow = p.flame
     const blast = new Set<number>([key(c, r)])
@@ -1067,9 +1118,25 @@ export class Game {
         blast.add(key(cc, rr))
       }
     }
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const cc = c + dc, rr = r + dr
-      if (this.canEnter(p, cc, rr) && !blast.has(key(cc, rr))) return true
+    // blast tiles are only fatal at detonation, so p may pass through them
+    // early — we just need to reach a tile outside the blast before the fuse
+    const maxSteps = Math.max(2, Math.floor((BOMB_FUSE / 1000) * p.speed * 0.7))
+    const seen = new Set<number>([key(c, r)])
+    let frontier: [number, number][] = [[c, r]]
+    for (let d = 0; d < maxSteps && frontier.length; d++) {
+      const next: [number, number][] = []
+      for (const [fc, fr] of frontier) {
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const cc = fc + dc, rr = fr + dr
+          const k = key(cc, rr)
+          if (seen.has(k)) continue
+          if (this.tile(cc, rr) !== T_WALK) continue
+          seen.add(k)
+          if (!blast.has(k)) return true
+          next.push([cc, rr])
+        }
+      }
+      frontier = next
     }
     return false
   }
