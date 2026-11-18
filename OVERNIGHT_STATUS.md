@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~6:30 AM · **State: complete, all tests green, ready to push**
+**Last updated:** Nov 19, ~6:25 AM · **State: complete, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -40,17 +40,23 @@ the bots never bombed. Fixed with a proper BFS escape check plus:
 Battle bots now fight and finish matches (10-min soak: full best-of-3 matches,
 no crashes). Preview live on port 4173.
 
-## Final polish (last hour, commits 0e9cdd6 → a044727)
+## Final polish (last stretch, commits 0e9cdd6 → c8c65a3)
 
 - **Haptic feedback** — explosions and player hits now pulse mobile vibration
   and gamepad rumble (scales with bomb power). Feature-detected, never throws.
 - **Auto-pause on blur** — switching tabs / losing window focus pauses the game,
   so you can't lose a life in the background.
-- **Full code review pass** — re-read every source file end-to-end; no bugs found,
-  no behaviour changes needed.
+- **Shorter battle matches** — sudden-death bombs now drop *adjacent to a random
+  player* (their original intent) instead of a random tile, so rounds resolve to a
+  single kill rather than a double-kill draw that replays the round. Measured over
+  20 AI matches: avg length 632s → 460s (−27%), draws 39 → 26 (−33%).
+- **Termination guard** — new `test/termination.ts` proves battle matches always
+  reach `battleover` (no soft-lock from endless draw-replays); `test/battle-stats.ts`
+  is the match-length / draw-rate harness.
+- **Full code review pass** — re-read every source file end-to-end; no bugs found.
 
-All tests re-run green after each change (tsc + smoke + 10-min soak + build).
-**32 commits total**, clean tree, no remote yet.
+All tests re-run green after each change (tsc + smoke + qa-long + 10-min soak +
+termination + build). **35 commits total**, clean tree, no remote yet.
 
 ## Verify (all passing as of last run)
 
@@ -72,7 +78,7 @@ In a real Terminal:
 zsh /Users/anson/.local/share/opencode/gh-setup.sh
 ```
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (32 commits).
+That creates the `HappyGentleMan/bomber-go` repo and pushes (35 commits).
 See `PUSH_TO_GITHUB.md` for details / manual steps.
 
 ## Play
