@@ -54,6 +54,15 @@ export class Game {
   shakeMag = 0
   shakeDur = 0
   shakeT = 0
+  // full-screen flash (big combos, level clear, sudden death)
+  flashColor = '255,255,255'
+  flashMag = 0
+  flashDur = 0
+  flashT = 0
+  // hit-stop: brief slow-mo on big moments
+  timeScale = 1
+  timeScaleT = 0
+  timeScaleDur = 0
 
   onEvent: ((ev: string, data?: any) => void) | null = null
 
@@ -72,6 +81,24 @@ export class Game {
     this.shakeMag = Math.max(this.shakeMag, mag)
     this.shakeDur = Math.max(this.shakeDur, dur)
     this.shakeT = Math.max(this.shakeT, dur)
+  }
+
+  flash(rgb: string, mag: number, dur: number) {
+    this.flashColor = rgb
+    this.flashMag = Math.max(this.flashMag, mag)
+    this.flashDur = Math.max(this.flashDur, dur)
+    this.flashT = Math.max(this.flashT, dur)
+  }
+
+  getFlashAlpha(): number {
+    if (this.flashT <= 0) return 0
+    return this.flashMag * (this.flashT / this.flashDur)
+  }
+
+  hitStop(scale: number, dur: number) {
+    this.timeScale = Math.min(this.timeScale, scale)
+    this.timeScaleT = Math.max(this.timeScaleT, dur)
+    this.timeScaleDur = Math.max(this.timeScaleDur, dur)
   }
 
   emit(ev: string, data?: any) {
@@ -326,6 +353,7 @@ export class Game {
     const bonus = Math.floor(this.levelTime - this.time) * 10
     this.score += bonus
     if (this.level % 4 === 0) this.lives++
+    this.flash('120,255,200', 0.35, 0.5)
     audio.play('levelClear')
     this.emit('levelclear', { level: this.level, bonus, score: this.score, lives: this.lives })
   }
@@ -598,6 +626,10 @@ export class Game {
     if (this.killChain >= 2) audio.play('combo')
     audio.play('boom')
     if (smash) this.shake(6, 0.25)
+    // screen flash escalates with the combo
+    if (this.killChain === 2) this.flash('255,46,136', 0.10, 0.18)
+    else if (this.killChain === 3) { this.flash('255,213,74', 0.16, 0.22); this.hitStop(0.15, 0.16) }
+    else if (this.killChain >= 4) { this.flash('255,82,82', 0.24, 0.3); this.hitStop(0.1, 0.22) }
   }
 
   // ---------------- bombs & flames ----------------
@@ -731,7 +763,9 @@ export class Game {
       return
     }
 
-    this.time += dt
+    // hit-stop: scale the simulation clock (particles/shake stay real-time)
+    const gdt = dt * this.timeScale
+    this.time += gdt
 
     // level timer
     const remaining = this.levelTime - this.time
@@ -741,7 +775,7 @@ export class Game {
         this.emit('suddendeath')
       }
       if (this.suddenDeath) {
-        this.suddenTick -= dt
+        this.suddenTick -= gdt
         if (this.suddenTick <= 0) {
           this.suddenTick = 3.5
           // remove a random soft brick
@@ -761,7 +795,7 @@ export class Game {
         this.emit('suddendeath')
       }
       if (this.suddenDeath) {
-        this.suddenTick -= dt
+        this.suddenTick -= gdt
         if (this.suddenTick <= 0) {
           this.suddenTick = 2
           this.battleSuddenDeath()
@@ -772,11 +806,11 @@ export class Game {
     // input for players
     const ins = this.players.map(p =>
       p.isAI ? this.aiThink(p) : (p.id === 0 ? inputs.p1 : inputs.p2))
-    this.updatePlayers(dt, ins)
+    this.updatePlayers(gdt, ins)
 
-    this.updateEnemies(dt)
-    this.updateBombs(dt)
-    this.updateFlames(dt)
+    this.updateEnemies(gdt)
+    this.updateBombs(gdt)
+    this.updateFlames(gdt)
     this.particles.update(dt)
     this.updateShake(dt)
 
@@ -785,7 +819,7 @@ export class Game {
     if (this.mode === 'campaign' && this.state === 'playing' && this.exit.revealed
       && this.enemies.every(e => !e.alive) && p0.alive
       && p0.col === this.exit.col && p0.row === this.exit.row) {
-      this.exitTimer += dt
+      this.exitTimer += gdt
       if (this.exitTimer > 0.6) this.levelClear()
     } else this.exitTimer = 0
 
@@ -803,6 +837,15 @@ export class Game {
     if (this.shakeT > 0) {
       this.shakeT -= dt
       if (this.shakeT <= 0) { this.shakeMag = 0; this.shakeDur = 0 }
+    }
+    if (this.flashT > 0) {
+      this.flashT -= dt
+      if (this.flashT <= 0) { this.flashMag = 0; this.flashDur = 0 }
+    }
+    // recover hit-stop toward normal speed
+    if (this.timeScale < 1) {
+      this.timeScaleT -= dt
+      if (this.timeScaleT <= 0) this.timeScale = 1
     }
   }
 

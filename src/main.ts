@@ -4,6 +4,7 @@ import { ui } from './ui'
 import { input } from './input'
 import { audio } from './audio'
 import { CANVAS_W, CANVAS_H } from './constants'
+import { isHighScore } from './storage'
 import type { Dir } from './constants'
 
 const stage = document.getElementById('stage')!
@@ -263,6 +264,14 @@ function loop(now: number) {
   if (pendingOver && game && game.state === 'over' && game.overTimer <= 0) {
     pendingOver = false
     appState = 'title'
+    if (isHighScore(game.score)) {
+      // golden celebration in the game world behind the overlay
+      game.particles.burst(360, 180, '#ffd54a', 42, 280)
+      game.particles.burst(360, 300, '#fff176', 30, 200)
+      game.particles.burst(360, 240, '#ffffff', 20, 320)
+      game.flash('255,213,74', 0.4, 0.7)
+      audio.play('fanfare')
+    }
     ui.showGameOver(game.score, game.level)
     ui.show('over')
     audio.setTrack('menu')

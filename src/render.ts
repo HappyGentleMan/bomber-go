@@ -21,6 +21,8 @@ export class Renderer {
   /** pre-rendered flame sprites (gradients are expensive per-frame) */
   private flameSprite: HTMLCanvasElement | null = null
   private flameArmSprite: HTMLCanvasElement | null = null
+  /** ambient dust motes drifting over the floor (cheap, adds life) */
+  private motes: { x: number; y: number; vx: number; vy: number; ph: number; sz: number }[] = []
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -32,6 +34,17 @@ export class Renderer {
     this.ctx = canvas.getContext('2d')!
     this.ctx.scale(dpr, dpr)
     this.ctx.imageSmoothingEnabled = false
+    // seed ambient dust motes
+    for (let i = 0; i < 14; i++) {
+      this.motes.push({
+        x: Math.random() * CANVAS_W,
+        y: Math.random() * CANVAS_H,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8 - 3,
+        ph: Math.random() * Math.PI * 2,
+        sz: 1 + Math.random() * 1.8,
+      })
+    }
   }
 
   draw(game: Game, t: number) {
@@ -42,6 +55,7 @@ export class Renderer {
 
     const th = themeForLevel(game.level)
     this.drawFloor(ctx, th)
+    this.drawMotes(ctx, t)
     this.drawExit(ctx, game, t)
     this.drawWalls(ctx, game, th)
     this.drawPowerups(ctx, game, t)
@@ -64,6 +78,12 @@ export class Renderer {
       g.addColorStop(0, 'rgba(255,0,0,0)')
       g.addColorStop(1, `rgba(255,30,30,${pulse})`)
       ctx.fillStyle = g
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+    }
+    // full-screen flash (big combos / level clear)
+    const fa = game.getFlashAlpha()
+    if (fa > 0) {
+      ctx.fillStyle = `rgba(${game.flashColor},${fa})`
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
     }
     ctx.restore()
@@ -98,6 +118,27 @@ export class Renderer {
 
   private drawFloor(ctx: CanvasRenderingContext2D, th: Theme) {
     ctx.drawImage(this.getFloor(th), 0, 0)
+  }
+
+  /** slow-drifting, twinkling dust motes just above the floor */
+  private drawMotes(ctx: CanvasRenderingContext2D, t: number) {
+    ctx.save()
+    for (const m of this.motes) {
+      // advance + wrap
+      m.x += m.vx / 60
+      m.y += m.vy / 60
+      if (m.x < 0) m.x += CANVAS_W
+      if (m.x > CANVAS_W) m.x -= CANVAS_W
+      if (m.y < 0) m.y += CANVAS_H
+      if (m.y > CANVAS_H) m.y -= CANVAS_H
+      const tw = 0.5 + 0.5 * Math.sin(t * 1.5 + m.ph)
+      ctx.globalAlpha = 0.05 + 0.12 * tw
+      ctx.fillStyle = '#cfe8ff'
+      ctx.beginPath()
+      ctx.arc(m.x, m.y, m.sz, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
   }
 
   /** wall sprites pre-rendered per theme (no per-frame gradients) */

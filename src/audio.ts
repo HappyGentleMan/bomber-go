@@ -6,7 +6,7 @@ type SfxName =
   | 'step' | 'bomb' | 'boom' | 'boomBig' | 'powerup' | 'hurt'
   | 'menuMove' | 'menuSelect' | 'levelClear' | 'gameOver'
   | 'freeze' | 'kick' | 'exit' | 'spawn' | 'shield' | 'count'
-  | 'combo' | 'tick'
+  | 'combo' | 'tick' | 'fanfare'
 
 class AudioEngine {
   private ctx: AudioContext | null = null
@@ -163,6 +163,11 @@ class AudioEngine {
       case 'gameOver':
         [392, 330, 262, 196].forEach((f, i) =>
           this.tone(f, 0.3, { type: 'triangle', vol: 0.22, when: i * 0.22, dest: g }))
+        break
+      case 'fanfare':
+        [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) =>
+          this.tone(f, 0.16, { vol: 0.2, when: i * 0.08, dest: g }))
+        this.tone(1568, 0.6, { type: 'square', vol: 0.12, when: 0.64, dest: g })
         break
       case 'freeze':
         this.tone(2000, 0.4, { type: 'sine', vol: 0.15, slideTo: 400, dest: g })
