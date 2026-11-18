@@ -384,6 +384,7 @@ export class Game {
     this.particles.burst(cx, cy, '#ffffff', 12, 140)
     this.shake(10, 0.4)
     audio.play('hurt')
+    haptic(90, 0.6, 0.9) // sharp double-thump feel for taking a hit
     if (this.mode === 'battle') {
       p.respawnIn = 2.5
       this.lastKiller = -1
