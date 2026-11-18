@@ -279,6 +279,16 @@ else if (start === 'demo') {
   dbg = startCampaign()
   dbg.players[0].isAI = true
 }
+else if (start === 'flame') {
+  dbg = startCampaign()
+  for (let r = 4; r <= 8; r++) for (let c = 5; c <= 9; c++) dbg.grid[r][c].t = 0
+  dbg.bombs.push({ id: dbg.bombId++, owner: 0, col: 7, row: 6, fuse: 120, power: 4, born: 0 })
+  dbg.enemies.push({
+    id: 999, type: 'balloom', col: 10, row: 6, x: 10, y: 6,
+    dir: 1, moving: false, movingDir: null, moveTimer: 0, aiTimer: 0,
+    hp: 1, alive: true, frozen: true, deadAt: 0, seed: 0.5,
+  })
+}
 if (dbg) {
   const steps = parseInt(params.get('steps') ?? '0')
   const idle = { dir: null as Dir | null, bomb: false, detonate: false }

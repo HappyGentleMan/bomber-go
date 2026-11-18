@@ -39,6 +39,7 @@ export class Renderer {
     this.drawExit(ctx, game, t)
     this.drawWalls(ctx, game)
     this.drawPowerups(ctx, game, t)
+    game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
     for (const b of game.bombs) this.drawBomb(ctx, b, t)
     for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t)
@@ -233,6 +234,7 @@ export class Renderer {
 
   private drawFlames(ctx: CanvasRenderingContext2D, game: Game, t: number) {
     const seen = new Set<string>()
+    const angles = [0, Math.PI, Math.PI / 2, -Math.PI / 2]
     for (const f of game.flames) {
       const id = `${f.col},${f.row},${f.dir}`
       if (seen.has(id)) continue
@@ -244,11 +246,23 @@ export class Renderer {
       const size = (TILE / 2 - 2) * Math.min(1, life * 3) * flick
       ctx.save()
       ctx.translate(x, y)
+      // continuous arm bar toward the blast direction
+      if (f.dir >= 0) {
+        ctx.save()
+        ctx.rotate(angles[f.dir])
+        const g2 = ctx.createLinearGradient(0, 0, size * 1.4, 0)
+        g2.addColorStop(0, `rgba(255,200,90,${0.9 * life})`)
+        g2.addColorStop(1, `rgba(255,90,30,${0.25 * life})`)
+        ctx.fillStyle = g2
+        roundRect(ctx, 0, -size * 0.55, size * 1.45, size * 1.1, size * 0.55)
+        ctx.fill()
+        ctx.restore()
+      }
       // outer
       const g = ctx.createRadialGradient(0, 0, 1, 0, 0, size)
-      g.addColorStop(0, `rgba(255,255,220,${0.95 * life})`)
-      g.addColorStop(0.4, `rgba(255,180,60,${0.85 * life})`)
-      g.addColorStop(0.8, `rgba(255,80,30,${0.6 * life})`)
+      g.addColorStop(0, `rgba(255,255,230,${Math.min(1, 0.98 * life)})`)
+      g.addColorStop(0.4, `rgba(255,190,60,${Math.min(1, 0.92 * life)})`)
+      g.addColorStop(0.8, `rgba(255,90,30,${0.7 * life})`)
       g.addColorStop(1, 'rgba(255,40,20,0)')
       ctx.fillStyle = g
       ctx.beginPath()

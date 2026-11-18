@@ -81,8 +81,10 @@ export class Particles {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, layer: 'smoke' | 'main' = 'main') {
     for (const p of this.list) {
+      if (layer === 'smoke' && p.kind !== 'smoke') continue
+      if (layer === 'main' && p.kind === 'smoke') continue
       const t = p.life / p.maxLife
       const alpha = 1 - t
       ctx.globalAlpha = alpha
