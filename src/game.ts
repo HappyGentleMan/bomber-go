@@ -205,6 +205,7 @@ export class Game {
     const active = this.bombs.filter(b => b.owner === p.id).length
     if (active >= p.bombs) return
     if (this.bombAt(p.col, p.row)) return
+    if (this.tile(p.col, p.row) === T_SOFT) return
     const fuse = Math.max(BOMB_FUSE_MIN, BOMB_FUSE - (this.level - 1) * 60)
     this.bombs.push({
       id: this.bombId++, owner: p.id,

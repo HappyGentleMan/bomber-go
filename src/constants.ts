@@ -7,6 +7,30 @@ export const TILE = 48
 export const CANVAS_W = COLS * TILE // 720
 export const CANVAS_H = ROWS * TILE // 624
 
+// Per-level visual themes (cycle)
+export interface Theme {
+  floor: string
+  floorAlt: string
+  grid: string
+  hardFill: string
+  hardEdge: string
+  brickFill: string
+  brickEdge: string
+  brickLight: string
+}
+
+export const THEMES: Theme[] = [
+  { floor: '#0d1322', floorAlt: 'rgba(255,255,255,0.02)', grid: 'rgba(0,229,255,0.04)', hardFill: '#1a2440', hardEdge: 'rgba(0,229,255,0.25)', brickFill: '#3d2b1f', brickEdge: 'rgba(255,120,60,0.5)', brickLight: 'rgba(255,180,120,0.12)' },
+  { floor: '#12101f', floorAlt: 'rgba(255,255,255,0.02)', grid: 'rgba(186,104,200,0.05)', hardFill: '#241a3d', hardEdge: 'rgba(186,104,200,0.3)', brickFill: '#2e2438', brickEdge: 'rgba(200,120,255,0.5)', brickLight: 'rgba(220,160,255,0.10)' },
+  { floor: '#0e1512', floorAlt: 'rgba(255,255,255,0.02)', grid: 'rgba(105,240,174,0.04)', hardFill: '#16281f', hardEdge: 'rgba(105,240,174,0.28)', brickFill: '#2a3320', brickEdge: 'rgba(140,220,120,0.5)', brickLight: 'rgba(180,255,150,0.10)' },
+  { floor: '#151011', floorAlt: 'rgba(255,255,255,0.02)', grid: 'rgba(255,82,82,0.045)', hardFill: '#2d1a20', hardEdge: 'rgba(255,82,82,0.3)', brickFill: '#3a2620', brickEdge: 'rgba(255,120,90,0.5)', brickLight: 'rgba(255,160,120,0.10)' },
+  { floor: '#101418', floorAlt: 'rgba(255,255,255,0.02)', grid: 'rgba(128,222,234,0.05)', hardFill: '#1c2b36', hardEdge: 'rgba(128,222,234,0.3)', brickFill: '#2b3a44', brickEdge: 'rgba(140,210,230,0.5)', brickLight: 'rgba(180,235,255,0.10)' },
+]
+
+export function themeForLevel(level: number): Theme {
+  return THEMES[(level - 1) % THEMES.length]
+}
+
 // Movement (tiles per second)
 export const PLAYER_BASE_SPEED = 4.2
 export const PLAYER_SPEED_STEP = 0.9

@@ -1,4 +1,4 @@
-import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H } from './constants'
+import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H, themeForLevel, type Theme } from './constants'
 import type { Game } from './game'
 import type { PlayerState, EnemyState, BombState } from './types'
 import { ENEMY_DEFS } from './enemies'
@@ -35,9 +35,10 @@ export class Renderer {
     const sh = game.getShakeOffset()
     ctx.translate(sh.x, sh.y)
 
-    this.drawFloor(ctx)
+    const th = themeForLevel(game.level)
+    this.drawFloor(ctx, th)
     this.drawExit(ctx, game, t)
-    this.drawWalls(ctx, game)
+    this.drawWalls(ctx, game, th)
     this.drawPowerups(ctx, game, t)
     game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
@@ -63,18 +64,18 @@ export class Renderer {
     ctx.restore()
   }
 
-  private drawFloor(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#0d1322'
+  private drawFloor(ctx: CanvasRenderingContext2D, th: Theme) {
+    ctx.fillStyle = th.floor
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         if ((c + r) % 2 === 0) {
-          ctx.fillStyle = 'rgba(255,255,255,0.02)'
+          ctx.fillStyle = th.floorAlt
           ctx.fillRect(c * TILE, r * TILE, TILE, TILE)
         }
       }
     // grid lines
-    ctx.strokeStyle = 'rgba(0,229,255,0.04)'
+    ctx.strokeStyle = th.grid
     ctx.lineWidth = 1
     ctx.beginPath()
     for (let c = 0; c <= COLS; c++) { ctx.moveTo(c * TILE + 0.5, 0); ctx.lineTo(c * TILE + 0.5, CANVAS_H) }
@@ -82,21 +83,21 @@ export class Renderer {
     ctx.stroke()
   }
 
-  private drawWalls(ctx: CanvasRenderingContext2D, game: Game) {
+  private drawWalls(ctx: CanvasRenderingContext2D, game: Game, th: Theme) {
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         const tile = game.grid[r][c].t
-        if (tile === T_HARD) this.drawHardWall(ctx, c, r)
-        else if (tile === T_SOFT) this.drawSoftWall(ctx, c, r)
+        if (tile === T_HARD) this.drawHardWall(ctx, c, r, th)
+        else if (tile === T_SOFT) this.drawSoftWall(ctx, c, r, th)
       }
   }
 
-  private drawHardWall(ctx: CanvasRenderingContext2D, c: number, r: number) {
+  private drawHardWall(ctx: CanvasRenderingContext2D, c: number, r: number, th: Theme) {
     const x = c * TILE, y = r * TILE
-    ctx.fillStyle = '#1a2440'
+    ctx.fillStyle = th.hardFill
     roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, 8)
     ctx.fill()
-    ctx.strokeStyle = 'rgba(0,229,255,0.25)'
+    ctx.strokeStyle = th.hardEdge
     ctx.lineWidth = 1.5
     roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 7)
     ctx.stroke()
@@ -106,9 +107,9 @@ export class Renderer {
     ctx.fill()
   }
 
-  private drawSoftWall(ctx: CanvasRenderingContext2D, c: number, r: number) {
+  private drawSoftWall(ctx: CanvasRenderingContext2D, c: number, r: number, th: Theme) {
     const x = c * TILE, y = r * TILE
-    ctx.fillStyle = '#3d2b1f'
+    ctx.fillStyle = th.brickFill
     roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, 6)
     ctx.fill()
     // brick lines
@@ -125,14 +126,14 @@ export class Renderer {
     ctx.lineTo(x + TILE * 3 / 4, y + TILE - 2)
     ctx.stroke()
     // neon edge
-    ctx.strokeStyle = 'rgba(255,120,60,0.5)'
+    ctx.strokeStyle = th.brickEdge
     ctx.lineWidth = 1.5
     roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 5)
     ctx.stroke()
     // subtle top light
     const g = ctx.createLinearGradient(x, y, x, y + TILE)
-    g.addColorStop(0, 'rgba(255,180,120,0.12)')
-    g.addColorStop(0.5, 'rgba(255,180,120,0)')
+    g.addColorStop(0, th.brickLight)
+    g.addColorStop(0.5, 'rgba(0,0,0,0)')
     ctx.fillStyle = g
     roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 5)
     ctx.fill()

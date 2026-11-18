@@ -275,6 +275,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 // debug hooks: ?start=campaign|battle|demo  (demo = AI plays campaign)
 // &steps=N pre-advances the sim N/60s (for deterministic screenshots)
+// &level=N jumps campaign to level N (for theme/screenshot checks)
 const params = new URLSearchParams(location.search)
 const start = params.get('start')
 let dbg: Game | null = null
@@ -305,6 +306,10 @@ else if (start === 'pause') {
   dbg = startCampaign()
 }
 if (dbg) {
+  const lvl = parseInt(params.get('level') ?? '0')
+  if (lvl > 1 && dbg.mode !== 'battle') {
+    for (let i = dbg.level; i < lvl; i++) dbg.nextLevel()
+  }
   const steps = parseInt(params.get('steps') ?? '0')
   const idle = { dir: null as Dir | null, bomb: false, detonate: false }
   for (let i = 0; i < steps; i++) dbg.update(1 / 60, { p1: idle, p2: idle })
