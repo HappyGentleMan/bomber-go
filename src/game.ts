@@ -374,7 +374,12 @@ export class Game {
       // credit kill to opponent (unless sudden-death bomb or mutual kill)
       const opp = this.players.find(q => q.id !== p.id)
       const suddenBomb = this.bombs.some(b => b.owner === -1)
-      if (opp && opp.alive && !suddenBomb) opp.kills++
+      if (opp && opp.alive && !suddenBomb) {
+        opp.kills++
+        this.score += 1000
+        this.particles.text(cx, cy - 24, 'KILL!', opp.color)
+        this.flash('255,46,136', 0.08, 0.15)
+      }
       this.emit('pdeath', { id: p.id })
     } else {
       this.lives--
