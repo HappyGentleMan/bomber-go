@@ -274,7 +274,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('./sw.js').catch(() => {})
 }
 
-// debug hooks: ?start=campaign|battle|demo  (demo = AI plays campaign)
+// debug hooks: ?start=campaign|battle|demo|flame|clear|pause|over  (demo = AI plays campaign)
 // &steps=N pre-advances the sim N/60s (for deterministic screenshots)
 // &level=N jumps campaign to level N (for theme/screenshot checks)
 const params = new URLSearchParams(location.search)
@@ -305,6 +305,12 @@ else if (start === 'clear') {
 }
 else if (start === 'pause') {
   dbg = startCampaign()
+}
+else if (start === 'over') {
+  dbg = startCampaign()
+  dbg.lives = 0
+  dbg.score = 12345
+  dbg.killPlayer(dbg.players[0], 'flame')
 }
 if (dbg) {
   const lvl = parseInt(params.get('level') ?? '0')
