@@ -18,6 +18,9 @@ export class Renderer {
   canvas: HTMLCanvasElement
   /** static floor pre-rendered per theme (big perf win vs per-frame fillRects) */
   private floorCache = new Map<string, HTMLCanvasElement>()
+  /** pre-rendered flame sprites (gradients are expensive per-frame) */
+  private flameSprite: HTMLCanvasElement | null = null
+  private flameArmSprite: HTMLCanvasElement | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -247,9 +250,45 @@ export class Renderer {
     ctx.restore()
   }
 
+  private getFlameSprite(): HTMLCanvasElement {
+    if (this.flameSprite) return this.flameSprite
+    const cv = document.createElement('canvas')
+    cv.width = 128; cv.height = 128
+    const c = cv.getContext('2d')!
+    const g = c.createRadialGradient(64, 64, 1, 64, 64, 64)
+    g.addColorStop(0, 'rgba(255,255,230,0.98)')
+    g.addColorStop(0.4, 'rgba(255,190,60,0.92)')
+    g.addColorStop(0.8, 'rgba(255,90,30,0.7)')
+    g.addColorStop(1, 'rgba(255,40,20,0)')
+    c.fillStyle = g
+    c.beginPath(); c.arc(64, 64, 64, 0, Math.PI * 2); c.fill()
+    c.fillStyle = 'rgba(255,255,240,0.9)'
+    c.beginPath(); c.arc(64, 64, 22, 0, Math.PI * 2); c.fill()
+    this.flameSprite = cv
+    return cv
+  }
+
+  private getFlameArmSprite(): HTMLCanvasElement {
+    if (this.flameArmSprite) return this.flameArmSprite
+    const cv = document.createElement('canvas')
+    cv.width = 128; cv.height = 128
+    const c = cv.getContext('2d')!
+    // arm starts at centre (64,64), points +x
+    const g = c.createLinearGradient(64, 0, 157, 0)
+    g.addColorStop(0, 'rgba(255,200,90,0.9)')
+    g.addColorStop(1, 'rgba(255,90,30,0.25)')
+    c.fillStyle = g
+    roundRect(c, 64, 64 - 35, 93, 70, 35)
+    c.fill()
+    this.flameArmSprite = cv
+    return cv
+  }
+
   private drawFlames(ctx: CanvasRenderingContext2D, game: Game, t: number) {
     const seen = new Set<string>()
     const angles = [0, Math.PI, Math.PI / 2, -Math.PI / 2]
+    const blob = this.getFlameSprite()
+    const arm = this.getFlameArmSprite()
     for (const f of game.flames) {
       const id = `${f.col},${f.row},${f.dir}`
       if (seen.has(id)) continue
@@ -259,40 +298,20 @@ export class Renderer {
       const life = f.ttl / (0.48)
       const flick = 0.85 + 0.15 * Math.sin(t * 30 + f.seed * 40)
       const size = (TILE / 2 - 2) * Math.min(1, life * 3) * flick
+      const k = size / 64 // sprite scale (sprite radius = 64)
       ctx.save()
       ctx.translate(x, y)
+      ctx.globalAlpha = Math.min(1, life)
       // continuous arm bar toward the blast direction
       if (f.dir >= 0) {
         ctx.save()
         ctx.rotate(angles[f.dir])
-        const g2 = ctx.createLinearGradient(0, 0, size * 1.4, 0)
-        g2.addColorStop(0, `rgba(255,200,90,${0.9 * life})`)
-        g2.addColorStop(1, `rgba(255,90,30,${0.25 * life})`)
-        ctx.fillStyle = g2
-        roundRect(ctx, 0, -size * 0.55, size * 1.45, size * 1.1, size * 0.55)
-        ctx.fill()
+        ctx.drawImage(arm, -64 * k, -64 * k, 128 * k, 128 * k)
         ctx.restore()
       }
-      // outer
-      const g = ctx.createRadialGradient(0, 0, 1, 0, 0, size)
-      g.addColorStop(0, `rgba(255,255,230,${Math.min(1, 0.98 * life)})`)
-      g.addColorStop(0.4, `rgba(255,190,60,${Math.min(1, 0.92 * life)})`)
-      g.addColorStop(0.8, `rgba(255,90,30,${0.7 * life})`)
-      g.addColorStop(1, 'rgba(255,40,20,0)')
-      ctx.fillStyle = g
-      ctx.beginPath()
-      // flame blob with wobble
-      for (let a = 0; a <= Math.PI * 2 + 0.01; a += Math.PI / 8) {
-        const w = size * (0.85 + 0.2 * Math.sin(a * 3 + t * 25 + f.seed * 20))
-        const px = Math.cos(a) * w, py = Math.sin(a) * w
-        if (a === 0) ctx.moveTo(px, py)
-        else ctx.lineTo(px, py)
-      }
-      ctx.closePath()
-      ctx.fill()
-      // inner core
-      ctx.fillStyle = `rgba(255,255,240,${0.9 * life})`
-      ctx.beginPath(); ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2); ctx.fill()
+      // flame blob (wobble approximated as scale jitter)
+      const wob = 0.94 + 0.06 * Math.sin(t * 25 + f.seed * 20)
+      ctx.drawImage(blob, -64 * k * wob, -64 * k * wob, 128 * k * wob, 128 * k * wob)
       ctx.restore()
     }
   }

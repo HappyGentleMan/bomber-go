@@ -295,6 +295,10 @@ else if (start === 'flame') {
     dir: 1, moving: false, movingDir: null, moveTimer: 0, aiTimer: 0,
     hp: 1, alive: true, frozen: true, deadAt: 0, born: 0, seed: 0.5,
   })
+  // pre-advance to explosion peak, then freeze the sim (deterministic screenshots)
+  const idle = { dir: null as Dir | null, bomb: false, detonate: false }
+  for (let i = 0; i < 18; i++) dbg.update(1 / 60, { p1: idle, p2: idle })
+  appState = 'paused'
 }
 else if (start === 'clear') {
   dbg = startCampaign()
