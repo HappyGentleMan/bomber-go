@@ -22,6 +22,20 @@ const key = (c: number, r: number) => c + r * COLS
 let idCounter = 1
 const nid = () => idCounter++
 
+/** haptic feedback: mobile vibration + gamepad rumble (feature-detected, never throws) */
+function haptic(ms: number, strong = 0.8, weak = 0.5) {
+  try {
+    if (typeof navigator === 'undefined') return
+    if ('vibrate' in navigator) (navigator as Navigator & { vibrate(p: number | number[]): boolean }).vibrate(ms)
+    if (navigator.getGamepads) {
+      for (const p of navigator.getGamepads()) {
+        const act = (p as Gamepad & { vibrationActuator?: { playEffect?(t: string, o: object): Promise<boolean> } })?.vibrationActuator
+        if (act?.playEffect) act.playEffect('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak }).catch(() => {})
+      }
+    }
+  } catch { /* haptics unavailable — ignore */ }
+}
+
 export class Game {
   mode: 'campaign' | 'battle' = 'campaign'
   state: 'playing' | 'levelclear' | 'over' | 'battleover' = 'playing'
@@ -654,6 +668,7 @@ export class Game {
     this.particles.explosion(cx, cy)
     this.shake(7, 0.3)
     audio.play(power >= 4 ? 'boomBig' : 'boom')
+    haptic(power >= 4 ? 130 : 70, power >= 4 ? 1 : 0.7, 0.5)
     if (!chain) this.killChain = 0
     const queue: BombState[] = []
     // core
