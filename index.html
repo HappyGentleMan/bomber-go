@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BOMBER GO 💣</title>
+  <meta name="description" content="BOMBER GO — a modern browser Bomberman. Blast bricks, grab power-ups, beat the AI. Procedural art & sound, no downloads." />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#0a0e1a" />
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --panel: #121a2e;
+      --neon: #00e5ff;
+      --pink: #ff2e88;
+      --gold: #ffd54a;
+      --text: #e8f0ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #app { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #stage {
+      position: relative;
+      box-shadow: 0 0 60px rgba(0,229,255,.15), 0 20px 60px rgba(0,0,0,.6);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    #game { display: block; image-rendering: pixelated; }
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px;
+      background: rgba(8, 12, 24, .78);
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      padding: 20px;
+    }
+    .hidden { display: none !important; }
+    .logo {
+      font-size: clamp(34px, 7vw, 64px);
+      font-weight: 900; letter-spacing: .08em;
+      background: linear-gradient(180deg, #fff 20%, var(--neon) 60%, var(--pink));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 0 18px rgba(0,229,255,.45));
+      text-align: center; line-height: 1.05;
+    }
+    .logo small { display: block; font-size: .32em; letter-spacing: .55em; color: var(--text); -webkit-text-fill-color: var(--text); opacity: .7; margin-top: 8px; font-weight: 600; }
+    .btn {
+      appearance: none; border: 2px solid rgba(0,229,255,.35);
+      background: linear-gradient(180deg, rgba(0,229,255,.12), rgba(255,46,136,.10));
+      color: var(--text);
+      font: inherit; font-weight: 700; letter-spacing: .12em;
+      font-size: clamp(14px, 2.2vw, 18px);
+      padding: 12px 34px; border-radius: 10px; cursor: pointer;
+      min-width: 260px; text-align: center;
+      transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .btn:hover, .btn.sel {
+      border-color: var(--neon);
+      box-shadow: 0 0 22px rgba(0,229,255,.35), inset 0 0 14px rgba(0,229,255,.12);
+      transform: translateY(-1px);
+    }
+    .btn:active { transform: translateY(1px) scale(.99); }
+    .btn.primary { border-color: var(--gold); background: linear-gradient(180deg, rgba(255,213,74,.16), rgba(255,46,136,.12)); }
+    .btn.primary:hover, .btn.primary.sel { box-shadow: 0 0 22px rgba(255,213,74,.4); border-color: var(--gold); }
+    .menu { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+    .panel {
+      background: var(--panel); border: 1px solid rgba(0,229,255,.2);
+      border-radius: 12px; padding: 18px 26px; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    }
+    .panel h2 { font-size: clamp(20px, 3.4vw, 30px); letter-spacing: .1em; margin-bottom: 10px; }
+    .panel .big { font-size: clamp(26px, 4vw, 40px); font-weight: 900; color: var(--gold); }
+    .row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+    .kbd {
+      display: inline-block; min-width: 26px; text-align: center;
+      background: #1c2740; border: 1px solid #33436b; border-bottom-width: 3px;
+      border-radius: 6px; padding: 3px 8px; font-weight: 700; font-size: 13px; color: #bcd2ff;
+    }
+    .hint { font-size: 12px; opacity: .65; letter-spacing: .06em; }
+    .score-table { font-variant-numeric: tabular-nums; }
+    .score-table div { display: flex; justify-content: space-between; gap: 30px; padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,.08); }
+    input.initials {
+      font: inherit; font-weight: 900; font-size: 26px; letter-spacing: .3em;
+      width: 130px; text-align: center; text-transform: uppercase;
+      background: #0d1426; color: var(--gold); border: 2px solid rgba(255,213,74,.4); border-radius: 8px; padding: 6px;
+    }
+    input.initials:focus { outline: none; border-color: var(--gold); }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: min(420px, 84vw); margin: 8px 0; }
+    .setting-row label { font-weight: 600; letter-spacing: .06em; }
+    input[type=range] { width: 200px; accent-color: var(--neon); }
+    .toggle { position: relative; width: 52px; height: 28px; border-radius: 20px; background: #1c2740; border: 1px solid #33436b; cursor: pointer; transition: background .15s; }
+    .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #5c6f9c; transition: all .15s; }
+    .toggle.on { background: rgba(0,229,255,.25); border-color: var(--neon); }
+    .toggle.on::after { left: 27px; background: var(--neon); }
+    /* HUD */
+    #hud {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 14px;
+      background: linear-gradient(180deg, rgba(6,10,20,.85), rgba(6,10,20,0));
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #hud .stat { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .05em; font-size: clamp(11px, 1.8vw, 15px); }
+    #hud .stat .val { color: var(--gold); }
+    #hud .pips { display: flex; gap: 3px; }
+    #hud .pip { width: 8px; height: 8px; border-radius: 2px; background: #2a3a5f; }
+    #hud .pip.on { background: var(--neon); box-shadow: 0 0 6px var(--neon); }
+    #hud .timer { font-size: clamp(16px, 2.6vw, 22px); font-weight: 900; }
+    #hud .timer.danger { color: #ff5252; animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: .4; } }
+    #banner {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      z-index: 8; pointer-events: none;
+      font-size: clamp(28px, 5vw, 52px); font-weight: 900; letter-spacing: .2em;
+      color: #fff; text-shadow: 0 0 24px var(--neon), 0 4px 12px rgba(0,0,0,.8);
+      opacity: 0; transition: opacity .25s;
+    }
+    #banner.show { opacity: 1; }
+    /* touch controls */
+    #touch { position: absolute; inset: 0; z-index: 6; pointer-events: none; display: none; }
+    body.touch #touch { display: block; }
+    .tbtn {
+      position: absolute; pointer-events: auto;
+      border-radius: 16px; border: 2px solid rgba(0,229,255,.4);
+      background: rgba(10,16,32,.55); color: var(--text);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 20px;
+      touch-action: none;
+    }
+    .tbtn:active { background: rgba(0,229,255,.25); }
+    #t-left  { width: 58px; height: 58px; left: 14px;  bottom: 92px; }
+    #t-right { width: 58px; height: 58px; left: 96px;  bottom: 92px; }
+    #t-up    { width: 58px; height: 58px; left: 55px;  bottom: 164px; }
+    #t-down  { width: 58px; height: 58px; left: 55px;  bottom: 20px; }
+    #t-bomb  { width: 84px; height: 84px; right: 20px; bottom: 36px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; }
+    #t-pause { width: 44px; height: 44px; right: 24px; bottom: 136px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <canvas id="game"></canvas>
+
+      <div id="hud" class="hidden">
+        <div class="stat" id="hud-player"></div>
+        <div class="stat"><span id="hud-level"></span></div>
+        <div class="stat timer" id="hud-timer">180</div>
+        <div class="stat" id="hud-score">SCORE <span class="val" id="hud-score-v">0</span></div>
+      </div>
+      <div id="banner"></div>
+
+      <div id="touch">
+        <div class="tbtn" id="t-left">◀</div>
+        <div class="tbtn" id="t-right">▶</div>
+        <div class="tbtn" id="t-up">▲</div>
+        <div class="tbtn" id="t-down">▼</div>
+        <div class="tbtn" id="t-bomb">BOMB</div>
+        <div class="tbtn" id="t-pause">II</div>
+      </div>
+
+      <!-- Title -->
+      <div id="ui-title" class="overlay">
+        <div class="logo">BOMBER GO<small>BLAST · POWER · SURVIVE</small></div>
+        <div class="menu" id="menu-main">
+          <button class="btn primary sel" data-action="campaign">CAREER</button>
+          <button class="btn" data-action="battle">BATTLE</button>
+          <button class="btn" data-action="scores">SCORES</button>
+          <button class="btn" data-action="settings">SETTINGS</button>
+        </div>
+        <div class="hint">⌨ <span class="kbd">W A S D</span> move · <span class="kbd">SPACE</span> bomb · <span class="kbd">E</span> detonate · <span class="kbd">P</span> pause</div>
+      </div>
+
+      <!-- Battle menu -->
+      <div id="ui-battle" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">BATTLE MODE</div>
+        <div class="menu" id="menu-battle">
+          <button class="btn primary sel" data-action="battle-1p">1P vs AI</button>
+          <button class="btn" data-action="battle-2p">2P LOCAL</button>
+          <button class="btn" data-action="back">BACK</button>
+        </div>
+        <div class="hint">P1 <span class="kbd">WASD</span>+<span class="kbd">SPACE</span> · P2 <span class="kbd">IJKL</span>+<span class="kbd">ENTER</span></div>
+      </div>
+
+      <!-- Settings -->
+      <div id="ui-settings" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">SETTINGS</div>
+        <div class="panel" style="text-align:left">
+          <div class="setting-row"><label>Music</label><input type="range" id="set-music" min="0" max="100" /></div>
+          <div class="setting-row"><label>Sound FX</label><input type="range" id="set-sfx" min="0" max="100" /></div>
+          <div class="setting-row"><label>Screen Shake</label><div class="toggle on" id="set-shake"></div></div>
+          <div class="setting-row"><label>Touch Controls</label><div class="toggle" id="set-touch"></div></div>
+        </div>
+        <div class="menu">
+          <button class="btn" data-action="back">BACK</button>
+        </div>
+      </div>
+
+      <!-- Scores -->
+      <div id="ui-scores" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">HIGH SCORES</div>
+        <div class="panel score-table" id="scores-list" style="min-width: 280px"></div>
+        <div class="menu">
+          <button class="btn" data-action="back">BACK</button>
+        </div>
+      </div>
+
+      <!-- Pause -->
+      <div id="ui-pause" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">PAUSED</div>
+        <div class="menu">
+          <button class="btn primary" data-action="resume">RESUME</button>
+          <button class="btn" data-action="to-menu">QUIT TO MENU</button>
+        </div>
+      </div>
+
+      <!-- Game over -->
+      <div id="ui-over" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(26px,5vw,44px); -webkit-text-fill-color: var(--pink)">GAME OVER</div>
+        <div class="panel">
+          <div>SCORE <span class="big" id="over-score">0</span></div>
+          <div class="hint" id="over-best"></div>
+          <div id="over-new" class="hidden" style="margin-top:10px">
+            <div class="hint" style="margin-bottom:6px">NEW HIGH SCORE — ENTER INITIALS</div>
+            <input class="initials" id="over-initials" maxlength="3" />
+          </div>
+        </div>
+        <div class="menu">
+          <button class="btn primary hidden" id="over-save" data-action="save-score">SAVE</button>
+          <button class="btn" data-action="to-menu">MENU</button>
+        </div>
+      </div>
+
+      <!-- Level clear -->
+      <div id="ui-clear" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,5vw,42px); -webkit-text-fill-color: var(--neon)">LEVEL CLEAR!</div>
+        <div class="panel">
+          <div id="clear-stats" class="hint" style="font-size:14px"></div>
+        </div>
+      </div>
+
+      <!-- Round over (battle) -->
+      <div id="ui-battleover" class="overlay hidden">
+        <div class="logo" id="battle-result" style="font-size: clamp(24px,5vw,44px)">PLAYER 1 WINS</div>
+        <div class="menu">
+          <button class="btn primary" data-action="rematch">REMATCH</button>
+          <button class="btn" data-action="to-menu">MENU</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
