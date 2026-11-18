@@ -268,6 +268,11 @@ input.attach()
 ui.init()
 startAttract()
 
+// PWA: offline support
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {})
+}
+
 // debug hooks: ?start=campaign|battle|demo  (demo = AI plays campaign)
 // &steps=N pre-advances the sim N/60s (for deterministic screenshots)
 const params = new URLSearchParams(location.search)
@@ -289,10 +294,21 @@ else if (start === 'flame') {
     hp: 1, alive: true, frozen: true, deadAt: 0, seed: 0.5,
   })
 }
+else if (start === 'clear') {
+  dbg = startCampaign()
+  for (const e of dbg.enemies) e.alive = false
+  dbg.exit.revealed = true
+  const p = dbg.players[0]
+  p.col = dbg.exit.col; p.row = dbg.exit.row; p.x = dbg.exit.col; p.y = dbg.exit.row
+}
+else if (start === 'pause') {
+  dbg = startCampaign()
+}
 if (dbg) {
   const steps = parseInt(params.get('steps') ?? '0')
   const idle = { dir: null as Dir | null, bomb: false, detonate: false }
   for (let i = 0; i < steps; i++) dbg.update(1 / 60, { p1: idle, p2: idle })
+  if (start === 'pause') pause()
 }
 
 requestAnimationFrame(loop)

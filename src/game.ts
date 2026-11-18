@@ -579,6 +579,9 @@ export class Game {
     this.particles.burst(cx, cy, def.color, 20, 200)
     this.particles.burst(cx, cy, '#ffffff', 8, 120)
     this.particles.text(cx, cy - 10, `+${pts}`, '#ffd54a')
+    if (this.killChain === 2) this.particles.text(360, 150, 'DOUBLE KILL!', '#ff2e88')
+    else if (this.killChain === 3) this.particles.text(360, 150, 'TRIPLE KILL!', '#ffd54a')
+    else if (this.killChain >= 4) this.particles.text(360, 150, `MEGA BLAST ×${this.killChain}!`, '#ff5252')
     audio.play('boom')
     if (smash) this.shake(6, 0.25)
   }

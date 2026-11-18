@@ -65,6 +65,12 @@ export class UI {
     if (!screen) return
     const el = $(`ui-${screen}`)
     if (el) el.classList.remove('hidden')
+    if (screen === 'title') {
+      const top = getScores()[0]
+      ;($('title-top') as HTMLElement).textContent = top
+        ? `TOP SCORE  ${top.score.toLocaleString()}  ·  ${top.initials}`
+        : ''
+    }
     // menu selection state
     if (screen === 'title' || screen === 'battle') {
       const menu = $(screen === 'title' ? 'menu-main' : 'menu-battle')
