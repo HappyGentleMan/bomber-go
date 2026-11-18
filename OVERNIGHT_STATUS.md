@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~2 AM · **State: complete, all tests green, ready to push**
+**Last updated:** Nov 19, ~6:30 AM · **State: complete, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -38,7 +38,19 @@ the bots never bombed. Fixed with a proper BFS escape check plus:
 - **Powerup legend** on the settings screen (all 11, generated from defs)
 
 Battle bots now fight and finish matches (10-min soak: full best-of-3 matches,
-no crashes). 24 commits, all tests green, preview live on port 4173.
+no crashes). Preview live on port 4173.
+
+## Final polish (last hour, commits 0e9cdd6 → a044727)
+
+- **Haptic feedback** — explosions and player hits now pulse mobile vibration
+  and gamepad rumble (scales with bomb power). Feature-detected, never throws.
+- **Auto-pause on blur** — switching tabs / losing window focus pauses the game,
+  so you can't lose a life in the background.
+- **Full code review pass** — re-read every source file end-to-end; no bugs found,
+  no behaviour changes needed.
+
+All tests re-run green after each change (tsc + smoke + 10-min soak + build).
+**32 commits total**, clean tree, no remote yet.
 
 ## Verify (all passing as of last run)
 
@@ -60,7 +72,7 @@ In a real Terminal:
 zsh /Users/anson/.local/share/opencode/gh-setup.sh
 ```
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (19 commits).
+That creates the `HappyGentleMan/bomber-go` repo and pushes (32 commits).
 See `PUSH_TO_GITHUB.md` for details / manual steps.
 
 ## Play
