@@ -326,6 +326,11 @@ input.attach()
 ui.init()
 startAttract()
 
+// auto-pause when the tab loses focus (prevents losing a life in the background)
+const autoPause = () => { if (appState === 'playing') pause() }
+window.addEventListener('blur', autoPause)
+document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause() })
+
 // PWA: offline support
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('./sw.js').catch(() => {})
