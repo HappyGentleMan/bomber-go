@@ -740,17 +740,32 @@ export class Game {
 
   battleSuddenDeath() {
     if (this.mode !== 'battle' || this.state !== 'playing') return
-    // drop a random bomb near a random alive player
+    // Target one player: drop the bomb on an open tile adjacent to them, so the
+    // round resolves to a single kill rather than a double-kill draw (which
+    // replays the whole round and drags matches out). Falls back to a random
+    // open tile if no adjacent spot is free.
     const alive = this.players.filter(p => p.alive)
     if (!alive.length) return
     const p = alive[Math.floor(Math.random() * alive.length)]
-    let c = p.col, r = p.row
-    for (let tries = 0; tries < 8; tries++) {
-      c = 1 + Math.floor(Math.random() * (COLS - 2))
-      r = 1 + Math.floor(Math.random() * (ROWS - 2))
-      if (this.tile(c, r) === T_WALK && !this.bombAt(c, r) &&
-        !this.players.some(pl => pl.alive && pl.col === c && pl.row === r)) break
+    const free = (c: number, r: number) =>
+      this.tile(c, r) === T_WALK && !this.bombAt(c, r) &&
+      !this.players.some(pl => pl.alive && pl.col === c && pl.row === r)
+    // shuffle the 4 neighbours of the target and take the first free one
+    const neighbours = [0, 1, 2, 3].map(d => ({ c: p.col + DIRS[d].x, r: p.row + DIRS[d].y }))
+    for (let i = neighbours.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[neighbours[i], neighbours[j]] = [neighbours[j], neighbours[i]]
     }
+    let c = -1, r = -1
+    for (const n of neighbours) if (free(n.c, n.r)) { c = n.c; r = n.r; break }
+    if (c < 0) {
+      for (let tries = 0; tries < 8; tries++) {
+        c = 1 + Math.floor(Math.random() * (COLS - 2))
+        r = 1 + Math.floor(Math.random() * (ROWS - 2))
+        if (free(c, r)) break
+      }
+    }
+    if (c < 0) return
     this.bombs.push({ id: this.bombId++, owner: -1, col: c, row: r, fuse: 1500, power: 2, born: this.time })
     audio.play('bomb')
   }
