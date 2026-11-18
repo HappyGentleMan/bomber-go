@@ -10,7 +10,7 @@ canvas, every sound is a WebAudio synth):
 - **Engine** — Vite + TypeScript, pure canvas, fixed 60 Hz timestep, 15×13 grid.
   Pre-rendered sprites for performance.
 - **3 modes** — Career (12+ levels, 5 cycling color themes), Battle (1P vs AI or
-  2P local), Attract (AI vs AI plays behind the title screen).
+  2P local, best-of-3 rounds), Attract (AI vs AI plays behind the title screen).
 - **8 classic enemies** with distinct AIs (wander, axis-chase, BFS, wallpass, flee).
 - **11 power-ups** — bomb/flame/speed+, shrinkers, shield, invincible, wallpass,
   freeze, kick, extra life.
@@ -33,10 +33,12 @@ the bots never bombed. Fixed with a proper BFS escape check plus:
 - reaction jitter, suicide-guarded early detonation, flame-powerup hunting
 - **KILL!** popup + flash; battle kills now award 1000 score
 - **Best-of-3 round system** — fresh map each round, powerups/kill stats persist,
-  round pips in the HUD (●○), round-win banners, match stats on the battle-over
-  screen (ROUNDS 2 — 1 · KILLS 3 — 2), CPU label in 1P vs AI matches
+  round pips in the HUD (●○), round-win + ROUND X banners, match stats on the
+  battle-over screen (ROUNDS 2 — 1 · KILLS 3 — 2), CPU label in 1P vs AI matches
+- **Powerup legend** on the settings screen (all 11, generated from defs)
 
-Battle bots now fight and finish matches (10-min soak: 4 full matches, no crashes).
+Battle bots now fight and finish matches (10-min soak: full best-of-3 matches,
+no crashes). 24 commits, all tests green, preview live on port 4173.
 
 ## Verify (all passing as of last run)
 
