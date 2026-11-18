@@ -213,6 +213,26 @@ export class Renderer {
     }
   }
 
+  /** pre-rendered bomb body+highlight (owner ring & spark stay dynamic) */
+  private bombSprite: HTMLCanvasElement | null = null
+
+  private getBombSprite(): HTMLCanvasElement {
+    if (this.bombSprite) return this.bombSprite
+    const cv = document.createElement('canvas')
+    cv.width = 40; cv.height = 40
+    const c = cv.getContext('2d')!
+    const g = c.createRadialGradient(16, 15, 2, 20, 20, 15)
+    g.addColorStop(0, '#4a5568')
+    g.addColorStop(0.5, '#1a202c')
+    g.addColorStop(1, '#0a0d14')
+    c.fillStyle = g
+    c.beginPath(); c.arc(20, 20, 14, 0, Math.PI * 2); c.fill()
+    c.fillStyle = 'rgba(255,255,255,0.25)'
+    c.beginPath(); c.arc(16, 15, 4, 0, Math.PI * 2); c.fill()
+    this.bombSprite = cv
+    return cv
+  }
+
   private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number) {
     const x = b.col * TILE + TILE / 2
     const y = b.row * TILE + TILE / 2
@@ -223,22 +243,14 @@ export class Renderer {
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.4)'
     ctx.beginPath(); ctx.ellipse(0, 12, 14, 5, 0, 0, Math.PI * 2); ctx.fill()
-    // body
-    const g = ctx.createRadialGradient(-4, -5, 2, 0, 0, 15)
-    g.addColorStop(0, '#4a5568')
-    g.addColorStop(0.5, '#1a202c')
-    g.addColorStop(1, '#0a0d14')
-    ctx.fillStyle = g
-    ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill()
+    // body (pre-rendered)
+    ctx.drawImage(this.getBombSprite(), -20, -20)
     // owner ring
     if (b.owner === 0) ctx.strokeStyle = 'rgba(0,229,255,0.8)'
     else if (b.owner === 1) ctx.strokeStyle = 'rgba(255,46,136,0.8)'
     else ctx.strokeStyle = 'rgba(255,80,80,0.9)'
     ctx.lineWidth = 2
     ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.stroke()
-    // highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'
-    ctx.beginPath(); ctx.arc(-4, -5, 4, 0, Math.PI * 2); ctx.fill()
     // fuse spark
     const spark = Math.random()
     if (spark > 0.5) {
