@@ -58,8 +58,9 @@ console.log('— Battle: 5 min, 2 AI —')
     }
   }
   check('no crash after 5 min', true)
-  check('multiple rounds played', resets >= 1, `resets=${resets}`)
-  console.log(`  (resets=${resets}, state=${b.state})`)
+  // best-of-3: a full match can take 260-450s, so check round transitions
+  check('rounds progress (round system works)', b.round >= 2 || resets >= 1, `round=${b.round} resets=${resets}`)
+  console.log(`  (round=${b.round}, roundWins=${b.roundWins.join('-')}, resets=${resets}, state=${b.state})`)
 }
 
 console.log('— 12 consecutive campaign levels (fresh games) —')

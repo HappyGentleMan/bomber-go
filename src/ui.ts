@@ -173,7 +173,7 @@ export class UI {
       `LEVEL ${level} CLEARED<br>BONUS +${bonus.toLocaleString()} · TOTAL ${score.toLocaleString()}<br>❤ ×${lives}`
   }
 
-  showBattleOver(winner: number, kills?: [number, number], cpu = false) {
+  showBattleOver(winner: number, kills?: [number, number], cpu = false, rounds?: [number, number]) {
     const el = $('battle-result')
     const name1 = 'PLAYER 1', name2 = cpu ? 'CPU' : 'PLAYER 2'
     if (winner === -1) { el.textContent = 'DRAW!'; el.style.setProperty('-webkit-text-fill-color', '#888') }
@@ -182,7 +182,12 @@ export class UI {
       el.style.setProperty('-webkit-text-fill-color', winner === 0 ? '#00e5ff' : '#ff2e88')
     }
     const stats = $('battle-stats')
-    if (stats) stats.textContent = kills ? `KILLS  ${kills[0]} — ${kills[1]}` : ''
+    if (stats) {
+      let s = ''
+      if (rounds) s += `ROUNDS ${rounds[0]} — ${rounds[1]}   `
+      if (kills) s += `KILLS ${kills[0]} — ${kills[1]}`
+      stats.textContent = s
+    }
   }
 }
 

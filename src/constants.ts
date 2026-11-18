@@ -52,6 +52,7 @@ export const MAX_FLAME = 8
 export const START_LIVES = 3
 export const LEVEL_TIME = 180 // seconds
 export const BATTLE_TIME = 120
+export const BATTLE_ROUND_TARGET = 2 // first to N rounds wins the match
 
 export const ENEMY_MAX = 10
 

@@ -23,7 +23,7 @@ npm run preview
 ## Features
 
 - **Career mode** — endless procedurally generated levels. Blast every enemy, find the hidden exit, beat the clock.
-- **Battle mode** — 1P vs AI or 2P local on one keyboard. Last bomber standing wins; sudden death when the timer expires.
+- **Battle mode** — 1P vs AI or 2P local on one keyboard. Best-of-3 rounds (fresh map each round, stats persist); sudden death bomb rain when a round's timer expires.
 - **Classic enemy roster, modern AI** — 8 enemy types: wanderers, axis-chasers, BFS pathfinders, wall-passing ghosts, flee/ambush bots. The player AI (attract / battle / demo) bombs before it dodges, and never self-destructs: a bomb is only placed if a BFS proves the player can walk out of the blast before the fuse runs out. In battle the bot hunts the opponent, backs off at point-blank, **traps** opponents hemmed into dead-ends, blasts bricks behind them to shrink their escape routes, and grabs flame powerups to extend its kill range.
 - **11 power-ups** — bomb +, flame +, speed +, shrink bomb, shrink flame, shield, invincibility, wall pass, freeze (stuns enemies — or your opponent in battle), kick, extra life.
 - **Chain reactions** — bombs detonate bombs. Multi-kill combos multiply your score (100 → 200 → 400 → 800…).

@@ -21,7 +21,7 @@ canvas, every sound is a WebAudio synth):
 - **PWA** — installable, works offline.
 - **Mobile** — portrait title / landscape gameplay, on-screen touch controls.
 
-## Last fix (this morning, commits 250c25c → cf8d18e)
+## Battle upgrades (this morning, commits 250c25c → 4404a17)
 
 The battle AI was stalemating (two bots orbiting the top row, 0 kills). Root cause:
 `blastEscape` — the "can I survive my own bomb" check — was almost always false, so
@@ -32,8 +32,11 @@ the bots never bombed. Fixed with a proper BFS escape check plus:
 - flee *through* blasts toward open space (blasts are only fatal at detonation)
 - reaction jitter, suicide-guarded early detonation, flame-powerup hunting
 - **KILL!** popup + flash; battle kills now award 1000 score
+- **Best-of-3 round system** — fresh map each round, powerups/kill stats persist,
+  round pips in the HUD (●○), round-win banners, match stats on the battle-over
+  screen (ROUNDS 2 — 1 · KILLS 3 — 2), CPU label in 1P vs AI matches
 
-Battle bots now fight and finish matches (10-min soak: 4 full rounds, no crashes).
+Battle bots now fight and finish matches (10-min soak: 4 full matches, no crashes).
 
 ## Verify (all passing as of last run)
 

@@ -3,7 +3,7 @@ import {
   PLAYER_BASE_SPEED, PLAYER_SPEED_STEP, PLAYER_MAX_SPEED_LEVELS,
   BOMB_FUSE, BOMB_FUSE_MIN, FLAME_DURATION, SPAWN_INVULN,
   SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION, KICK_DURATION,
-  MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME,
+  MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME, BATTLE_ROUND_TARGET,
   POWERUP_DEFS,
 } from './constants'
 import type { Dir } from './constants'
@@ -48,6 +48,8 @@ export class Game {
   overTimer = 0
   lastKiller: number = -1
   winner: number = -1 // battle
+  round = 1                     // battle: current round
+  roundWins: [number, number] = [0, 0] // battle: rounds won per player
   bombId = 1
   exitTimer = 0
   particles = new Particles()
@@ -738,11 +740,48 @@ export class Game {
   }
 
   endBattle(winner: number | -1) {
+    if (this.mode !== 'battle') return
+    // award the round (a draw replays the round)
+    if (winner >= 0) this.roundWins[winner]++
+    const done = winner >= 0 && this.roundWins[winner] >= BATTLE_ROUND_TARGET
+    if (!done) {
+      this.emit('roundwin', { winner, round: this.round, roundWins: [...this.roundWins] })
+      this.startRound()
+      return
+    }
     this.state = 'battleover'
     this.winner = winner
-    this.emit('battleover', { winner })
+    this.emit('battleover', { winner, roundWins: [...this.roundWins] })
     if (winner >= 0) audio.play('levelClear')
     else audio.play('gameOver')
+  }
+
+  /** battle: start the next round (fresh map, stats persist) */
+  startRound() {
+    this.round++
+    this.def = generateBattleMap()
+    this.grid = this.def.grid
+    this.bombs = []
+    this.flames = []
+    this.powerups = []
+    this.enemies = []
+    this.time = 0
+    this.suddenDeath = false
+    this.suddenTick = 0
+    this.killChain = 0
+    this.aiState.clear()
+    for (const p of this.players) {
+      const s = this.def.playerSpawns[p.id] ?? { col: 1, row: 1 }
+      p.alive = true
+      p.col = s.col; p.row = s.row; p.x = s.col; p.y = s.row
+      p.moving = false; p.movingDir = null; p.dir = 0
+      p.invincibleUntil = this.time + SPAWN_INVULN / 1000
+      p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
+      p.frozenUntil = 0
+      p.respawnIn = 0
+    }
+    this.state = 'playing'
+    this.particles.clear()
   }
 
   // ---------------- main update ----------------

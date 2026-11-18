@@ -88,11 +88,19 @@ function wireGame() {
       case 'suddendeath':
         ui.banner('⚠ SUDDEN DEATH ⚠', 1.6)
         break
+      case 'roundwin':
+        if (!game!.attract) {
+          const w = data.winner
+          ui.banner(w === -1 ? 'DRAW — REPLAYING ROUND' : `${w === 0 ? 'PLAYER 1' : 'PLAYER 2'} TAKES THE ROUND!`, 2)
+          audio.play('combo')
+        }
+        break
       case 'battleover':
         if (game!.attract) {
           window.setTimeout(startAttract, 1500)
         } else {
-          ui.showBattleOver(data.winner, [game!.players[0].kills, game!.players[1].kills], battleOpts.aiPlayer2)
+          ui.showBattleOver(data.winner, [game!.players[0].kills, game!.players[1].kills], battleOpts.aiPlayer2,
+            data.roundWins as [number, number] | undefined)
           ui.show('battleover')
           appState = 'title'
         }
@@ -213,8 +221,9 @@ function hudUpdate() {
       <span class="pips">${pips(Math.round((p.speed - 4.2) / 0.9) + 1, 5, 'spd')}</span>`
   } else {
     const p2 = game.players[1]
-    playerHtml = `<span style="color:#00e5ff">P1 ⚔${p.kills}</span>
-      <span style="color:#ff2e88">P2 ⚔${p2?.kills ?? 0}</span>`
+    const rp = (n: number) => (n >= 2 ? '●●' : n === 1 ? '●○' : '○○')
+    playerHtml = `<span style="color:#00e5ff">P1 ${rp(game.roundWins[0])} ⚔${p.kills}</span>
+      <span style="color:#ff2e88">P2 ${rp(game.roundWins[1])} ⚔${p2?.kills ?? 0}</span>`
   }
   ui.hudSet({
     score: game.mode === 'campaign' ? game.score : game.players[0].kills * 1000 + game.players[1].kills * 1000,
