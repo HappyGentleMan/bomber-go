@@ -823,101 +823,160 @@ export class Game {
     const out = { dir: null as Dir | null, bomb: false, detonate: false }
     if (!p.alive) return out
     const enemy = this.players.find(q => q.id !== p.id && q.alive)
-    const enemyE = !enemy && this.mode === 'campaign' ? this.enemies.find(e => e.alive) : undefined
-    if (!enemy && !enemyE) return out
-    const tc = enemy ? enemy.col : enemyE!.col
-    const tr = enemy ? enemy.row : enemyE!.row
-
-    // 1. immediate danger override
-    const threat = this.threatDir(p)
-    if (threat !== null) {
-      this.aiState.delete(p.id)
-      return { ...out, dir: threat }
-    }
-
-    // 2. path following (replan periodically)
-    let st = this.aiState.get(p.id)
-    if (!st || this.time > st.repath) {
-      let target = { c: tc, r: tr }
-      let best = 99
-      for (const u of this.powerups) {
-        const d = Math.abs(u.col - p.col) + Math.abs(u.row - p.row)
-        if (d < best && d < 12) { best = d; target = { c: u.col, r: u.row } }
+    // nearest living enemy (campaign)
+    let nearest: { col: number; row: number } | null = null
+    let nearestD = 999
+    if (enemy) {
+      nearest = { col: enemy.col, row: enemy.row }
+      nearestD = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
+    } else if (this.mode === 'campaign') {
+      for (const e of this.enemies) if (e.alive) {
+        const d = Math.abs(e.col - p.col) + Math.abs(e.row - p.row)
+        if (d < nearestD) { nearestD = d; nearest = { col: e.col, row: e.row } }
       }
-      const path = this.bfs(p.col, p.row, target.c, target.r, false) ?? []
-      st = { path, repath: this.time + 0.5 }
-      this.aiState.set(p.id, st)
     }
-    while (st.path.length && st.path[0].x === p.col && st.path[0].y === p.row) st.path.shift()
-    if (st.path.length) {
-      const dc = st.path[0].x - p.col, dr = st.path[0].y - p.row
-      out.dir = dc === 1 ? 0 : dc === -1 ? 1 : dr === 1 ? 2 : 3
-    } else if (this.time > st.repath) {
-      out.dir = Math.floor(Math.random() * 4) as Dir
-      st.repath = this.time + 0.3
-    }
+    if (!enemy && !nearest && this.mode !== 'campaign') return out
 
-    // 3. bomb when close, detonate when it will hit
+    // 1. bomb decisions (before the threat override, which flees the blast)
     const myBombs = this.bombs.filter(b => b.owner === p.id)
     if (enemy) {
       const distEnemy = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
       if (distEnemy <= p.flame + 1 && !this.bombAt(p.col, p.row)
-        && myBombs.length < p.bombs && this.hasEscape(p)) {
+        && myBombs.length < p.bombs && this.blastEscape(p)) {
         out.bomb = true
       }
       if (myBombs.length) {
         const b = myBombs.sort((a, b) => a.born - b.born)[0]
         if (this.bombHits(b, enemy.col, enemy.row)) out.detonate = true
       }
-    } else if (enemyE) {
-      // campaign: bomb when a straight flame line reaches the enemy
-      const sameRow = enemyE.row === p.row && Math.abs(enemyE.col - p.col) <= p.flame
-      const sameCol = enemyE.col === p.col && Math.abs(enemyE.row - p.row) <= p.flame
-      if ((sameRow || sameCol) && !this.bombAt(p.col, p.row) && myBombs.length < p.bombs) {
-        // check clear line
-        let clear = true
-        const dc = Math.sign(enemyE.col - p.col), dr = Math.sign(enemyE.row - p.row)
-        for (let i = 1; i <= Math.abs(enemyE.col - p.col) + Math.abs(enemyE.row - p.row) - 1; i++) {
-          const t = this.tile(p.col + dc * i, p.row + dr * i)
-          if (t !== T_WALK) { clear = false; break }
+    } else if (nearest) {
+      // campaign: bomb any enemy lined up within flame range
+      if (!this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)) {
+        for (const e of this.enemies) {
+          if (!e.alive) continue
+          const dc = e.col - p.col, dr = e.row - p.row
+          if (!((dc !== 0 && dr === 0) || (dc === 0 && dr !== 0))) continue
+          const steps = Math.abs(dc) + Math.abs(dr)
+          if (steps > p.flame) continue
+          let clear = true
+          const sdc = Math.sign(dc), sdr = Math.sign(dr)
+          for (let i = 1; i <= steps - 1; i++)
+            if (this.tile(p.col + sdc * i, p.row + sdr * i) !== T_WALK) { clear = false; break }
+          if (clear) { out.bomb = true; break }
         }
-        if (clear) out.bomb = true
       }
+    }
+
+    // 2. immediate danger override
+    const threat = this.threatDir(p, out.bomb)
+    if (threat !== null) {
+      this.aiState.delete(p.id)
+      return { ...out, dir: threat }
+    }
+
+    // 3. path following (replan periodically)
+    let st = this.aiState.get(p.id)
+    if (!st || this.time > st.repath) {
+      let target: { c: number; r: number }
+      if (this.mode === 'campaign' && !nearest) {
+        target = { c: this.exit.col, r: this.exit.row }
+      } else {
+        // priority: flame (can't kill with weak flame) > bomb > other powerup >
+        // nearest enemy; engage a very close enemy over powerup hunting
+        target = nearest ? { c: nearest.col, r: nearest.row } : { c: this.exit.col, r: this.exit.row }
+        let best = 99, bestPrio = 9
+        const wantFlame = p.flame < 3
+        const wantBomb = p.bombs < 2
+        for (const u of this.powerups) {
+          const d = Math.abs(u.col - p.col) + Math.abs(u.row - p.row)
+          if (d >= 12) continue
+          const prio = (u.kind === 'flame' && wantFlame) ? 0
+            : (u.kind === 'bomb' && wantBomb) ? 1 : 2
+          if (prio < bestPrio || (prio === bestPrio && d < best)) {
+            bestPrio = prio; best = d; target = { c: u.col, r: u.row }
+          }
+        }
+        if (nearest && nearestD <= 4) target = { c: nearest.col, r: nearest.row }
+      }
+      const path = this.bfs(p.col, p.row, target.c, target.r, true) ?? []
+      st = { path, repath: this.time + 0.5 }
+      this.aiState.set(p.id, st)
+    }
+    while (st.path.length && st.path[0].x === p.col && st.path[0].y === p.row) st.path.shift()
+    if (st.path.length) {
+      const dc = st.path[0].x - p.col, dr = st.path[0].y - p.row
+      const nd = (dc === 1 ? 0 : dc === -1 ? 1 : dr === 1 ? 2 : 3) as Dir
+      const [mc, mr] = dirVec(nd)
+      const nc = p.col + mc, nrr = p.row + mr
+      // brick on the path: bomb it (own-tile bomb burns adjacent bricks)
+      if (this.tile(nc, nrr) === T_SOFT && !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)) {
+        out.bomb = true
+      } else {
+        out.dir = nd
+      }
+    } else if (this.time > st.repath) {
+      out.dir = Math.floor(Math.random() * 4) as Dir
+      st.repath = this.time + 0.3
     }
     return out
   }
 
-  private threatDir(p: PlayerState): Dir | null {
-    const flame = this.flameSet()
-    const [dc, dr] = dirVec(p.dir)
-    if (flame.has(key(p.col + dc, p.row + dr)) || flame.has(key(p.col, p.row))) {
-      // pick a safe perpendicular / any safe tile
-      let best: Dir | null = null, bestScore = -1
-      for (const q of [2, 3, 0, 1] as Dir[]) {
-        const [c2, r2] = dirVec(q)
-        const nc = p.col + c2, nr = p.row + r2
-        if (this.canEnter(p, nc, nr) && !flame.has(key(nc, nr))) {
-          const s = (nc === p.col + dc && nr === p.row + dr) ? 0 : 1
-          if (s > bestScore) { bestScore = s; best = q }
+  private threatDir(p: PlayerState, justBombed: boolean): Dir | null {
+    // imminent danger = live flames + tiles soon-to-be bombs will cover
+    const soon = this.flameSet()
+    for (const b of this.bombs) {
+      if (b.fuse > 1500) continue
+      soon.add(key(b.col, b.row))
+      for (const [dc2, dr2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (let i = 1; i <= b.power; i++) {
+          const c = b.col + dc2 * i, r = b.row + dr2 * i
+          const t = this.tile(c, r)
+          if (t === T_HARD) break
+          if (t === T_SOFT) { soon.add(key(c, r)); break }
+          soon.add(key(c, r))
         }
       }
-      if (best) return best
     }
-    // bombs about to explode nearby: run to the farthest safe tile
-    for (const b of this.bombs) {
-      const d = Math.abs(b.col - p.col) + Math.abs(b.row - p.row)
-      if (d <= 2 && b.fuse < 900) {
-        let best: Dir | null = null, bestD = 1
+    const [dc, dr] = dirVec(p.dir)
+    const safe = (q: Dir): boolean => {
+      const [c2, r2] = dirVec(q)
+      const nc = p.col + c2, nr = p.row + r2
+      return this.canEnter(p, nc, nr) && !soon.has(key(nc, nr))
+        && !this.enemies.some(e => e.alive && e.col === nc && e.row === nr)
+    }
+    // nearby enemy: flee only from uncontrolled approaches. An enemy in a
+    // straight line is controllable (bomb it, or back off along the line), so
+    // we don't panic-flee those — we only flee diagonal/close threats.
+    const near = this.enemies.find(e => e.alive && Math.abs(e.col - p.col) + Math.abs(e.row - p.row) <= 3)
+    if (near) {
+      const d = Math.abs(near.col - p.col) + Math.abs(near.row - p.row)
+      const inLine = near.col === p.col || near.row === p.row
+      const bombable = justBombed && inLine && d <= p.flame
+      const mustFlee = (d <= 1 && !(inLine && d <= p.flame)) || (d === 2 && !inLine)
+      if (!bombable && mustFlee) {
+        let best: Dir | null = null, bestScore = -Infinity
         for (const q of [0, 1, 2, 3] as Dir[]) {
+          if (!safe(q)) continue
           const [c2, r2] = dirVec(q)
           const nc = p.col + c2, nr = p.row + r2
-          if (this.canEnter(p, nc, nr) && !flame.has(key(nc, nr))) {
-            const dist = Math.abs(nc - b.col) + Math.abs(nr - b.row)
-            if (dist > bestD) { bestD = dist; best = q }
-          }
+          const dist = Math.abs(nc - near.col) + Math.abs(nr - near.row)
+          const score = dist * 3 + this.openNeighbors(nc, nr)
+          if (score > bestScore) { bestScore = score; best = q }
         }
+        if (!best) for (const q of [2, 3, 0, 1] as Dir[]) if (safe(q)) { best = q; break }
         if (best) return best
       }
+    }
+    // on fire / about to be on fire: get out
+    if (soon.has(key(p.col, p.row)) || soon.has(key(p.col + dc, p.row + dr))) {
+      let best: Dir | null = null, bestScore = -1
+      for (const q of [2, 3, 0, 1] as Dir[]) {
+        if (!safe(q)) continue
+        const [c2, r2] = dirVec(q)
+        const s = (p.col + c2 === p.col + dc && p.row + r2 === p.row + dr) ? 0 : 1
+        if (s > bestScore) { bestScore = s; best = q }
+      }
+      if (best) return best
     }
     return null
   }
@@ -936,10 +995,38 @@ export class Game {
     return steps <= b.power
   }
 
-  private hasEscape(p: PlayerState): boolean {
-    for (const d of DIRS) {
-      const c = p.col + d.x, r = p.row + d.y
-      if (this.tile(c, r) === T_WALK && !this.bombAt(c, r) && !this.enemyAt(c, r)) return true
+  /** count walkable, unoccupied neighbour tiles (0-4) — used to avoid corners */
+  private openNeighbors(c: number, r: number): number {
+    let n = 0
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const cc = c + dc, rr = r + dr
+      if (cc < 1 || rr < 1 || cc >= COLS - 1 || rr >= ROWS - 1) continue
+      const t = this.tile(cc, rr)
+      if (t === T_HARD || t === T_SOFT) continue
+      if (this.bombAt(cc, rr)) continue
+      if (this.enemies.some(e => e.alive && e.col === cc && e.row === rr)) continue
+      n++
+    }
+    return n
+  }
+
+  /** true if, after placing a bomb on p's tile, at least one adjacent tile
+   *  stays outside the blast — otherwise the bomb is a self-destruct */
+  private blastEscape(p: PlayerState): boolean {
+    const c = p.col, r = p.row, pow = p.flame
+    const blast = new Set<number>([key(c, r)])
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let i = 1; i <= pow; i++) {
+        const cc = c + dc * i, rr = r + dr * i
+        const t = this.tile(cc, rr)
+        if (t === T_HARD) break
+        if (t === T_SOFT) { blast.add(key(cc, rr)); break }
+        blast.add(key(cc, rr))
+      }
+    }
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const cc = c + dc, rr = r + dr
+      if (this.canEnter(p, cc, rr) && !blast.has(key(cc, rr))) return true
     }
     return false
   }
