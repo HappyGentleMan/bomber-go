@@ -149,6 +149,16 @@
     #t-down  { width: 58px; height: 58px; left: 55px;  bottom: 20px; }
     #t-bomb  { width: 84px; height: 84px; right: 20px; bottom: 36px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; }
     #t-pause { width: 44px; height: 44px; right: 24px; bottom: 136px; font-size: 16px; }
+    /* portrait phones: compact overlays so menus fit */
+    @media (orientation: portrait) and (max-width: 520px) {
+      .overlay { gap: 10px; padding: 12px; overflow-y: auto; }
+      .logo { font-size: clamp(24px, 8.5vw, 38px); }
+      .logo small { margin-top: 4px; letter-spacing: .4em; }
+      .btn { min-width: 210px; padding: 10px 22px; font-size: 15px; }
+      .menu { gap: 8px; }
+      #ui-title > .hint:last-of-type { display: none; }
+      .panel { padding: 12px 18px; }
+    }
   </style>
 </head>
 <body>
