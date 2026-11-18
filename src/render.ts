@@ -100,60 +100,60 @@ export class Renderer {
     ctx.drawImage(this.getFloor(th), 0, 0)
   }
 
+  /** wall sprites pre-rendered per theme (no per-frame gradients) */
+  private wallCache = new Map<string, { hard: HTMLCanvasElement; soft: HTMLCanvasElement }>()
+
+  private getWallSprites(th: Theme) {
+    let s = this.wallCache.get(th.floor + th.brickFill)
+    if (s) return s
+    const make = () => {
+      const cv = document.createElement('canvas')
+      cv.width = TILE; cv.height = TILE
+      return cv
+    }
+    const hard = make(), soft = make()
+    const h = hard.getContext('2d')!, b = soft.getContext('2d')!
+    const T = TILE
+    // hard wall
+    h.fillStyle = th.hardFill
+    roundRect(h, 1, 1, T - 2, T - 2, 8); h.fill()
+    h.strokeStyle = th.hardEdge
+    h.lineWidth = 1.5
+    roundRect(h, 2, 2, T - 4, T - 4, 7); h.stroke()
+    h.fillStyle = 'rgba(255,255,255,0.04)'
+    roundRect(h, 9, 9, T - 18, T - 18, 4); h.fill()
+    // soft brick
+    b.fillStyle = th.brickFill
+    roundRect(b, 1, 1, T - 2, T - 2, 6); b.fill()
+    b.strokeStyle = 'rgba(0,0,0,0.35)'
+    b.lineWidth = 1
+    b.beginPath()
+    b.moveTo(2, T / 2); b.lineTo(T - 2, T / 2)
+    b.moveTo(T / 2, 2); b.lineTo(T / 2, T / 2)
+    b.moveTo(T / 4, T / 2); b.lineTo(T / 4, T - 2)
+    b.moveTo(T * 3 / 4, T / 2); b.lineTo(T * 3 / 4, T - 2)
+    b.stroke()
+    b.strokeStyle = th.brickEdge
+    b.lineWidth = 1.5
+    roundRect(b, 2, 2, T - 4, T - 4, 5); b.stroke()
+    const g = b.createLinearGradient(0, 0, 0, T)
+    g.addColorStop(0, th.brickLight)
+    g.addColorStop(0.5, 'rgba(0,0,0,0)')
+    b.fillStyle = g
+    roundRect(b, 2, 2, T - 4, T - 4, 5); b.fill()
+    s = { hard, soft }
+    this.wallCache.set(th.floor + th.brickFill, s)
+    return s
+  }
+
   private drawWalls(ctx: CanvasRenderingContext2D, game: Game, th: Theme) {
+    const s = this.getWallSprites(th)
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         const tile = game.grid[r][c].t
-        if (tile === T_HARD) this.drawHardWall(ctx, c, r, th)
-        else if (tile === T_SOFT) this.drawSoftWall(ctx, c, r, th)
+        if (tile === T_HARD) ctx.drawImage(s.hard, c * TILE, r * TILE)
+        else if (tile === T_SOFT) ctx.drawImage(s.soft, c * TILE, r * TILE)
       }
-  }
-
-  private drawHardWall(ctx: CanvasRenderingContext2D, c: number, r: number, th: Theme) {
-    const x = c * TILE, y = r * TILE
-    ctx.fillStyle = th.hardFill
-    roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, 8)
-    ctx.fill()
-    ctx.strokeStyle = th.hardEdge
-    ctx.lineWidth = 1.5
-    roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 7)
-    ctx.stroke()
-    // inner panel
-    ctx.fillStyle = 'rgba(255,255,255,0.04)'
-    roundRect(ctx, x + 9, y + 9, TILE - 18, TILE - 18, 4)
-    ctx.fill()
-  }
-
-  private drawSoftWall(ctx: CanvasRenderingContext2D, c: number, r: number, th: Theme) {
-    const x = c * TILE, y = r * TILE
-    ctx.fillStyle = th.brickFill
-    roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, 6)
-    ctx.fill()
-    // brick lines
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(x + 2, y + TILE / 2)
-    ctx.lineTo(x + TILE - 2, y + TILE / 2)
-    ctx.moveTo(x + TILE / 2, y + 2)
-    ctx.lineTo(x + TILE / 2, y + TILE / 2)
-    ctx.moveTo(x + TILE / 4, y + TILE / 2)
-    ctx.lineTo(x + TILE / 4, y + TILE - 2)
-    ctx.moveTo(x + TILE * 3 / 4, y + TILE / 2)
-    ctx.lineTo(x + TILE * 3 / 4, y + TILE - 2)
-    ctx.stroke()
-    // neon edge
-    ctx.strokeStyle = th.brickEdge
-    ctx.lineWidth = 1.5
-    roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 5)
-    ctx.stroke()
-    // subtle top light
-    const g = ctx.createLinearGradient(x, y, x, y + TILE)
-    g.addColorStop(0, th.brickLight)
-    g.addColorStop(0.5, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g
-    roundRect(ctx, x + 2, y + 2, TILE - 4, TILE - 4, 5)
-    ctx.fill()
   }
 
   private drawExit(ctx: CanvasRenderingContext2D, game: Game, t: number) {
