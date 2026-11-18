@@ -312,6 +312,7 @@ export class Game {
             b.col = kc; b.row = kr
             audio.play('kick')
             this.particles.text(kc * 48 + 24, kr * 48 + 12, 'KICK!', '#ffab91')
+            this.particles.dust(kc * 48 + 24, kr * 48 + 24)
           }
         }
       }
