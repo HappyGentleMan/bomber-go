@@ -62,6 +62,20 @@ export class Particles {
     }
   }
 
+  dust(cx: number, cy: number) {
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2
+      const s = 15 + Math.random() * 35
+      this.list.push({
+        x: cx + (Math.random() - 0.5) * 10, y: cy + (Math.random() - 0.5) * 10,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s - 10,
+        life: 0, maxLife: 0.3 + Math.random() * 0.2,
+        size: 2 + Math.random() * 2,
+        color: 'rgba(150,150,165,0.5)', kind: 'smoke', grav: 0,
+      })
+    }
+  }
+
   text(cx: number, cy: number, text: string, color = '#ffd54a') {
     this.list.push({
       x: cx, y: cy, vx: 0, vy: -50,

@@ -16,6 +16,8 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 export class Renderer {
   ctx: CanvasRenderingContext2D
   canvas: HTMLCanvasElement
+  /** static floor pre-rendered per theme (big perf win vs per-frame fillRects) */
+  private floorCache = new Map<string, HTMLCanvasElement>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -43,7 +45,7 @@ export class Renderer {
     game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
     for (const b of game.bombs) this.drawBomb(ctx, b, t)
-    for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t)
+    for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t, game.time)
     for (const p of game.players) if (p.alive) this.drawPlayer(ctx, p, t, game)
     game.particles.draw(ctx)
 
@@ -64,23 +66,35 @@ export class Renderer {
     ctx.restore()
   }
 
-  private drawFloor(ctx: CanvasRenderingContext2D, th: Theme) {
-    ctx.fillStyle = th.floor
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
+  private getFloor(th: Theme): HTMLCanvasElement {
+    let cv = this.floorCache.get(th.floor)
+    if (cv) return cv
+    cv = document.createElement('canvas')
+    cv.width = CANVAS_W
+    cv.height = CANVAS_H
+    const c = cv.getContext('2d')!
+    c.fillStyle = th.floor
+    c.fillRect(0, 0, CANVAS_W, CANVAS_H)
     for (let r = 0; r < ROWS; r++)
-      for (let c = 0; c < COLS; c++) {
-        if ((c + r) % 2 === 0) {
-          ctx.fillStyle = th.floorAlt
-          ctx.fillRect(c * TILE, r * TILE, TILE, TILE)
+      for (let cc = 0; cc < COLS; cc++) {
+        if ((cc + r) % 2 === 0) {
+          c.fillStyle = th.floorAlt
+          c.fillRect(cc * TILE, r * TILE, TILE, TILE)
         }
       }
     // grid lines
-    ctx.strokeStyle = th.grid
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    for (let c = 0; c <= COLS; c++) { ctx.moveTo(c * TILE + 0.5, 0); ctx.lineTo(c * TILE + 0.5, CANVAS_H) }
-    for (let r = 0; r <= ROWS; r++) { ctx.moveTo(0, r * TILE + 0.5); ctx.lineTo(CANVAS_W, r * TILE + 0.5) }
-    ctx.stroke()
+    c.strokeStyle = th.grid
+    c.lineWidth = 1
+    c.beginPath()
+    for (let cc = 0; cc <= COLS; cc++) { c.moveTo(cc * TILE + 0.5, 0); c.lineTo(cc * TILE + 0.5, CANVAS_H) }
+    for (let r = 0; r <= ROWS; r++) { c.moveTo(0, r * TILE + 0.5); c.lineTo(CANVAS_W, r * TILE + 0.5) }
+    c.stroke()
+    this.floorCache.set(th.floor, cv)
+    return cv
+  }
+
+  private drawFloor(ctx: CanvasRenderingContext2D, th: Theme) {
+    ctx.drawImage(this.getFloor(th), 0, 0)
   }
 
   private drawWalls(ctx: CanvasRenderingContext2D, game: Game, th: Theme) {
@@ -344,12 +358,15 @@ export class Renderer {
     ctx.restore()
   }
 
-  private drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, t: number) {
+  private drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, t: number, gt: number) {
     const def = ENEMY_DEFS[e.type]
     const x = e.x * TILE + TILE / 2
     const y = e.y * TILE + TILE / 2
     ctx.save()
     ctx.translate(x, y)
+    // spawn pop-in
+    const age = gt - e.born
+    if (age < 0.3) ctx.scale(0.2 + 0.8 * Math.min(1, age / 0.3), 0.2 + 0.8 * Math.min(1, age / 0.3))
     const bob = e.moving ? Math.sin(t * 12 + e.seed * 10) * 2.5 : Math.sin(t * 2.5 + e.seed * 10) * 1.5
     ctx.translate(0, bob)
     if (e.frozen) ctx.globalAlpha = 0.8

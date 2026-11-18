@@ -37,6 +37,7 @@ export interface PlayerState {
   frozenUntil: number
   alive: boolean
   respawnIn: number
+  stepTimer: number
   score: number
   kills: number
   color: string
@@ -78,6 +79,7 @@ export interface EnemyState {
   alive: boolean
   frozen: boolean
   deadAt: number
+  born: number
   seed: number
 }
 

@@ -90,7 +90,7 @@ export class Game {
       bombs: 1, flame: 1,
       shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0, kickUntil: 0,
       frozenUntil: 0,
-      alive: true, respawnIn: 0,
+      alive: true, respawnIn: 0, stepTimer: 0,
       score: 0, kills: 0,
       color: id === 0 ? '#00e5ff' : '#ff2e88',
     }
@@ -117,6 +117,7 @@ export class Game {
         moving: false, movingDir: null,
         moveTimer: 0, aiTimer: Math.random() * 2,
         hp: def.hp, alive: true, frozen: false, deadAt: 0,
+        born: this.time,
         seed: Math.random(),
       })
     }
@@ -212,6 +213,8 @@ export class Game {
       col: p.col, row: p.row,
       fuse, power: p.flame, born: this.time,
     })
+    const c = this.particles.tileCenter(p.col, p.row)
+    this.particles.dust(c.x, c.y)
     audio.play('bomb')
   }
 
@@ -231,6 +234,14 @@ export class Game {
       }
       if (p.frozenUntil > this.time) { p.moving = false; p.movingDir = null; this.pickupPowerups(p); continue }
       this.moveEntity(p, dt)
+      if (p.moving) {
+        p.stepTimer -= dt
+        if (p.stepTimer <= 0) {
+          p.stepTimer = 0.22
+          const c = this.particles.tileCenter(p.col, p.row)
+          this.particles.dust(c.x, c.y + 12)
+        }
+      }
       this.pickupPowerups(p)
     }
     // overlap deaths (enemies)

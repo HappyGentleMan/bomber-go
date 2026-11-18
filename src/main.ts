@@ -52,7 +52,7 @@ function startBattle(aiP2: boolean): Game {
   battleOpts = { aiPlayer2: aiP2, attract: false }
   ui.show(null)
   ui.banner('BATTLE!', 1.2)
-  audio.setTrack('game')
+  audio.setTrack('battle')
   audio.ensure()
   return game
 }
@@ -113,7 +113,7 @@ function resume() {
   if (appState !== 'paused') return
   appState = 'playing'
   ui.show(null)
-  audio.setTrack('game')
+  audio.setTrack(game && game.mode === 'battle' ? 'battle' : 'game')
 }
 
 ui.onAction = (action: string) => {
@@ -245,6 +245,7 @@ function loop(now: number) {
       game.update(STEP, { p1: inputs.p1, p2: inputs.p2 })
       acc -= STEP
     }
+    audio.suddenDeath = game.suddenDeath
   } else {
     input.poll() // consume so keys don't stick
   }
@@ -292,7 +293,7 @@ else if (start === 'flame') {
   dbg.enemies.push({
     id: 999, type: 'balloom', col: 10, row: 6, x: 10, y: 6,
     dir: 1, moving: false, movingDir: null, moveTimer: 0, aiTimer: 0,
-    hp: 1, alive: true, frozen: true, deadAt: 0, seed: 0.5,
+    hp: 1, alive: true, frozen: true, deadAt: 0, born: 0, seed: 0.5,
   })
 }
 else if (start === 'clear') {

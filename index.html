@@ -118,6 +118,11 @@
     #hud .timer { font-size: clamp(16px, 2.6vw, 22px); font-weight: 900; }
     #hud .timer.danger { color: #ff5252; animation: pulse 1s infinite; }
     @keyframes pulse { 50% { opacity: .4; } }
+    @keyframes hsglow {
+      0%, 100% { text-shadow: 0 0 8px var(--gold), 0 0 18px rgba(255,213,74,.5); }
+      50% { text-shadow: 0 0 16px var(--gold), 0 0 34px rgba(255,213,74,.9); }
+    }
+    #over-new .hint { color: var(--gold); font-weight: 700; letter-spacing: .08em; animation: hsglow 1.2s ease-in-out infinite; }
     #banner {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
       z-index: 8; pointer-events: none;

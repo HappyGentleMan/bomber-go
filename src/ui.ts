@@ -12,6 +12,7 @@ export class UI {
   menuIndex = 0
   menuScreen: HTMLElement | null = null
   savedScore = false
+  private scoreRaf = 0
 
   init() {
     document.querySelectorAll('[data-action]').forEach(btn => {
@@ -138,7 +139,17 @@ export class UI {
 
   showGameOver(score: number, level: number) {
     this.savedScore = false
-    $('over-score').textContent = score.toLocaleString()
+    // count-up animation
+    const el = $('over-score')
+    if (this.scoreRaf) cancelAnimationFrame(this.scoreRaf)
+    const t0 = performance.now(), dur = 900
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur)
+      const ease = 1 - Math.pow(1 - k, 3)
+      el.textContent = Math.round(score * ease).toLocaleString()
+      if (k < 1) this.scoreRaf = requestAnimationFrame(tick)
+    }
+    this.scoreRaf = requestAnimationFrame(tick)
     $('over-best').textContent = `Reached level ${level}`
     const isNew = isHighScore(score)
     $('over-new').classList.toggle('hidden', !isNew)

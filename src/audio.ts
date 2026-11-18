@@ -16,7 +16,7 @@ class AudioEngine {
   private musicTimer: number | null = null
   private musicStep = 0
   private musicNext = 0
-  private track: 'none' | 'menu' | 'game' = 'none'
+  private track: 'none' | 'menu' | 'game' | 'battle' = 'none'
 
   ensure() {
     if (this.ctx) {
@@ -46,6 +46,8 @@ class AudioEngine {
   }
 
   muted = false
+  /** when true, music tempo +30% for sudden-death tension */
+  suddenDeath = false
 
   toggleMute(): boolean {
     this.muted = !this.muted
@@ -191,8 +193,11 @@ class AudioEngine {
   private static MENU_LEAD = [440, 0, 523, 0, 587, 0, 0, 523, 494, 0, 587, 0, 659, 0, 587, 0]
   private static GAME_BASS = [82, 0, 82, 82, 0, 82, 0, 98, 82, 0, 82, 82, 0, 73, 0, 98]
   private static GAME_LEAD = [659, 0, 659, 784, 0, 880, 784, 0, 659, 0, 587, 659, 0, 523, 0, 587]
+  // battle: faster, driving minor-key arpeggio
+  private static BATTLE_BASS = [82, 82, 98, 82, 110, 110, 98, 82, 82, 82, 98, 82, 110, 110, 123, 0]
+  private static BATTLE_LEAD = [659, 0, 784, 880, 0, 784, 659, 0, 880, 0, 1047, 880, 784, 0, 659, 587]
 
-  setTrack(t: 'none' | 'menu' | 'game') {
+  setTrack(t: 'none' | 'menu' | 'game' | 'battle') {
     if (this.track === t) return
     this.track = t
     if (!this.ctx) return
@@ -208,20 +213,24 @@ class AudioEngine {
 
   private musicTick() {
     if (!this.ctx || !this.musicGain) return
-    const spb = this.track === 'menu' ? 60 / 92 / 2 : 60 / 148 / 2 // seconds per 8th note
+    const baseBpm = this.track === 'menu' ? 92 : this.track === 'battle' ? 172 : 148
+    const bpm = baseBpm * (this.suddenDeath ? 1.3 : 1)
+    const spb = 60 / bpm / 2 // seconds per 8th note
+    const bassArr = this.track === 'menu' ? AudioEngine.MENU_BASS : this.track === 'battle' ? AudioEngine.BATTLE_BASS : AudioEngine.GAME_BASS
+    const leadArr = this.track === 'menu' ? AudioEngine.MENU_LEAD : this.track === 'battle' ? AudioEngine.BATTLE_LEAD : AudioEngine.GAME_LEAD
     while (this.musicNext < this.ctx.currentTime + 0.12) {
       const s = this.musicStep % 16
       const when = this.musicNext - this.ctx.currentTime
-      const bass = (this.track === 'menu' ? AudioEngine.MENU_BASS : AudioEngine.GAME_BASS)[s]
-      const lead = (this.track === 'menu' ? AudioEngine.MENU_LEAD : AudioEngine.GAME_LEAD)[s]
-      if (bass) this.tone(bass, spb * 0.9, { type: 'triangle', vol: 0.3, when, dest: this.musicGain })
-      if (lead && (this.track === 'game' ? true : Math.random() < 0.85))
-        this.tone(lead, spb * 0.8, { type: 'square', vol: 0.07, when, dest: this.musicGain })
+      const bass = bassArr[s]
+      const lead = leadArr[s]
+      if (bass) this.tone(bass, spb * 0.9, { type: 'triangle', vol: this.track === 'battle' ? 0.32 : 0.3, when, dest: this.musicGain })
+      if (lead && (this.track === 'menu' ? Math.random() < 0.85 : true))
+        this.tone(lead, spb * 0.8, { type: 'square', vol: this.track === 'battle' ? 0.085 : 0.07, when, dest: this.musicGain })
       // hat
-      if (s % 4 === 2) this.noise(0.04, { vol: this.track === 'game' ? 0.07 : 0.04, freq: 8000, type: 'highpass', when, dest: this.musicGain })
+      if (s % 4 === 2) this.noise(0.04, { vol: this.track === 'battle' ? 0.09 : this.track === 'game' ? 0.07 : 0.04, freq: 8000, type: 'highpass', when, dest: this.musicGain })
       // kick
-      if (s % 4 === 0 && this.track === 'game')
-        this.tone(120, 0.09, { type: 'sine', vol: 0.22, slideTo: 40, when, dest: this.musicGain })
+      if (s % 4 === 0 && this.track !== 'menu')
+        this.tone(120, 0.09, { type: 'sine', vol: this.track === 'battle' ? 0.26 : 0.22, slideTo: 40, when, dest: this.musicGain })
       this.musicNext += spb
       this.musicStep++
     }
