@@ -654,7 +654,10 @@ export class Game {
     this.particles.burst(cx, cy, '#b08050', 12, 150)
     // powerup?
     const pi = this.powerups.findIndex(u => u.col === c && u.row === r)
-    if (pi >= 0) this.powerups[pi] // revealed (stays in list, drawn now)
+    if (pi >= 0) {
+      // revealed: sparkle in the powerup's color
+      this.particles.burst(cx, cy, POWERUP_DEFS[this.powerups[pi].kind].color, 10, 110)
+    }
     // exit?
     if (this.exit.col === c && this.exit.row === r) {
       this.exit.revealed = true
