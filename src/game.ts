@@ -228,6 +228,7 @@ export class Game {
         const oldest = this.bombs.filter(b => b.owner === p.id).sort((a, b) => a.born - b.born)[0]
         if (oldest) this.detonate(oldest)
       }
+      if (p.frozenUntil > this.time) { p.moving = false; p.movingDir = null; this.pickupPowerups(p); continue }
       this.moveEntity(p, dt)
       this.pickupPowerups(p)
     }
@@ -382,7 +383,19 @@ export class Game {
       case 'shield': p.shieldUntil = this.time + SHIELD_DURATION / 1000; this.particles.text(cx, cy, 'SHIELD', '#69f0ae'); audio.play('shield'); break
       case 'invincible': p.invincibleUntil = this.time + INVINCIBLE_DURATION / 1000; this.particles.text(cx, cy, 'INVINCIBLE', '#ffd54a'); break
       case 'wallpass': p.wallpassUntil = this.time + WALLPASS_DURATION / 1000; this.particles.text(cx, cy, 'WALL PASS', '#f48fb1'); break
-      case 'freeze': this.freezeUntil = this.time + FREEZE_DURATION / 1000; this.particles.text(cx, cy, 'FREEZE!', '#80deea'); audio.play('freeze'); break
+      case 'freeze':
+        if (this.mode === 'battle') {
+          const opp = this.players.find(q => q.id !== p.id)
+          if (opp) {
+            opp.frozenUntil = this.time + 3
+            this.particles.text(opp.x * 48 + 24, opp.y * 48 + 16, 'STUNNED!', '#80deea')
+          }
+        } else {
+          this.freezeUntil = this.time + FREEZE_DURATION / 1000
+        }
+        this.particles.text(cx, cy, 'FREEZE!', '#80deea')
+        audio.play('freeze')
+        break
       case 'kick': p.kickUntil = this.time + KICK_DURATION / 1000; this.particles.text(cx, cy, 'KICK', '#ffab91'); break
       case 'life': this.lives++; this.particles.text(cx, cy, 'EXTRA LIFE!', '#fff176'); break
     }
@@ -790,7 +803,10 @@ export class Game {
     const out = { dir: null as Dir | null, bomb: false, detonate: false }
     if (!p.alive) return out
     const enemy = this.players.find(q => q.id !== p.id && q.alive)
-    if (!enemy) return out
+    const enemyE = !enemy && this.mode === 'campaign' ? this.enemies.find(e => e.alive) : undefined
+    if (!enemy && !enemyE) return out
+    const tc = enemy ? enemy.col : enemyE!.col
+    const tr = enemy ? enemy.row : enemyE!.row
 
     // 1. immediate danger override
     const threat = this.threatDir(p)
@@ -802,7 +818,7 @@ export class Game {
     // 2. path following (replan periodically)
     let st = this.aiState.get(p.id)
     if (!st || this.time > st.repath) {
-      let target = { c: enemy.col, r: enemy.row }
+      let target = { c: tc, r: tr }
       let best = 99
       for (const u of this.powerups) {
         const d = Math.abs(u.col - p.col) + Math.abs(u.row - p.row)
@@ -822,15 +838,31 @@ export class Game {
     }
 
     // 3. bomb when close, detonate when it will hit
-    const distEnemy = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
     const myBombs = this.bombs.filter(b => b.owner === p.id)
-    if (distEnemy <= p.flame + 1 && !this.bombAt(p.col, p.row)
-      && myBombs.length < p.bombs && this.hasEscape(p)) {
-      out.bomb = true
-    }
-    if (myBombs.length) {
-      const b = myBombs.sort((a, b) => a.born - b.born)[0]
-      if (this.bombHits(b, enemy.col, enemy.row)) out.detonate = true
+    if (enemy) {
+      const distEnemy = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
+      if (distEnemy <= p.flame + 1 && !this.bombAt(p.col, p.row)
+        && myBombs.length < p.bombs && this.hasEscape(p)) {
+        out.bomb = true
+      }
+      if (myBombs.length) {
+        const b = myBombs.sort((a, b) => a.born - b.born)[0]
+        if (this.bombHits(b, enemy.col, enemy.row)) out.detonate = true
+      }
+    } else if (enemyE) {
+      // campaign: bomb when a straight flame line reaches the enemy
+      const sameRow = enemyE.row === p.row && Math.abs(enemyE.col - p.col) <= p.flame
+      const sameCol = enemyE.col === p.col && Math.abs(enemyE.row - p.row) <= p.flame
+      if ((sameRow || sameCol) && !this.bombAt(p.col, p.row) && myBombs.length < p.bombs) {
+        // check clear line
+        let clear = true
+        const dc = Math.sign(enemyE.col - p.col), dr = Math.sign(enemyE.row - p.row)
+        for (let i = 1; i <= Math.abs(enemyE.col - p.col) + Math.abs(enemyE.row - p.row) - 1; i++) {
+          const t = this.tile(p.col + dc * i, p.row + dr * i)
+          if (t !== T_WALK) { clear = false; break }
+        }
+        if (clear) out.bomb = true
+      }
     }
     return out
   }
@@ -838,20 +870,33 @@ export class Game {
   private threatDir(p: PlayerState): Dir | null {
     const flame = this.flameSet()
     const [dc, dr] = dirVec(p.dir)
-    if (flame.has(key(p.col + dc, p.row + dr))) {
-      // pick a safe perpendicular
-      for (const d of [2, 3, 0, 1] as Dir[]) {
-        const [c2, r2] = dirVec(d)
-        if (!flame.has(key(p.col + c2, p.row + r2)) && this.canEnter(p, p.col + c2, p.row + r2)) return d
+    if (flame.has(key(p.col + dc, p.row + dr)) || flame.has(key(p.col, p.row))) {
+      // pick a safe perpendicular / any safe tile
+      let best: Dir | null = null, bestScore = -1
+      for (const q of [2, 3, 0, 1] as Dir[]) {
+        const [c2, r2] = dirVec(q)
+        const nc = p.col + c2, nr = p.row + r2
+        if (this.canEnter(p, nc, nr) && !flame.has(key(nc, nr))) {
+          const s = (nc === p.col + dc && nr === p.row + dr) ? 0 : 1
+          if (s > bestScore) { bestScore = s; best = q }
+        }
       }
-      return null
+      if (best) return best
     }
-    // bomb about to explode near me
+    // bombs about to explode nearby: run to the farthest safe tile
     for (const b of this.bombs) {
       const d = Math.abs(b.col - p.col) + Math.abs(b.row - p.row)
-      if (d <= 1 && b.fuse < 500) {
-        const away: Dir = (b.col >= p.col ? 1 : 0) as Dir
-        if (this.canEnter(p, p.col + dirVec(away)[0], p.row + dirVec(away)[1])) return away
+      if (d <= 2 && b.fuse < 900) {
+        let best: Dir | null = null, bestD = 1
+        for (const q of [0, 1, 2, 3] as Dir[]) {
+          const [c2, r2] = dirVec(q)
+          const nc = p.col + c2, nr = p.row + r2
+          if (this.canEnter(p, nc, nr) && !flame.has(key(nc, nr))) {
+            const dist = Math.abs(nc - b.col) + Math.abs(nr - b.row)
+            if (dist > bestD) { bestD = dist; best = q }
+          }
+        }
+        if (best) return best
       }
     }
     return null

@@ -119,7 +119,7 @@ export function generateLevel(level: number): LevelDef {
   clearAround(grid, 1, 1)
 
   // soft bricks
-  const brickDensity = Math.min(0.62, 0.34 + level * 0.02)
+  const brickDensity = Math.min(0.68, 0.42 + level * 0.015)
   const softCells: { col: number; row: number }[] = []
   for (let r = 1; r < ROWS - 1; r++)
     for (let c = 1; c < COLS - 1; c++) {

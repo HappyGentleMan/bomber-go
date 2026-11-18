@@ -45,10 +45,18 @@ class AudioEngine {
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1
   }
 
+  muted = false
+
+  toggleMute(): boolean {
+    this.muted = !this.muted
+    this.applyVolumes()
+    return this.muted
+  }
+
   applyVolumes() {
     if (!this.ctx || !this.musicGain || !this.sfxGain) return
-    this.musicGain.gain.value = (settings.musicVol / 100) * 0.5
-    this.sfxGain.gain.value = (settings.sfxVol / 100) * 0.9
+    this.musicGain.gain.value = this.muted ? 0 : (settings.musicVol / 100) * 0.5
+    this.sfxGain.gain.value = this.muted ? 0 : (settings.sfxVol / 100) * 0.9
   }
 
   setMusicVolume(v: number) { updateSettings({ musicVol: v }); this.applyVolumes() }

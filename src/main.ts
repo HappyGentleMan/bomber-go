@@ -34,7 +34,7 @@ fit()
 
 // ---------- game lifecycle ----------
 
-function startCampaign() {
+function startCampaign(): Game {
   game = new Game('campaign')
   wireGame()
   appState = 'playing'
@@ -42,9 +42,10 @@ function startCampaign() {
   ui.banner('LEVEL 1', 1.2)
   audio.setTrack('game')
   audio.ensure()
+  return game
 }
 
-function startBattle(aiP2: boolean) {
+function startBattle(aiP2: boolean): Game {
   game = new Game('battle', { aiPlayer2: aiP2 })
   wireGame()
   appState = 'playing'
@@ -53,6 +54,7 @@ function startBattle(aiP2: boolean) {
   ui.banner('BATTLE!', 1.2)
   audio.setTrack('game')
   audio.ensure()
+  return game
 }
 
 function startAttract() {
@@ -265,4 +267,22 @@ function loop(now: number) {
 input.attach()
 ui.init()
 startAttract()
+
+// debug hooks: ?start=campaign|battle|demo  (demo = AI plays campaign)
+// &steps=N pre-advances the sim N/60s (for deterministic screenshots)
+const params = new URLSearchParams(location.search)
+const start = params.get('start')
+let dbg: Game | null = null
+if (start === 'campaign') dbg = startCampaign()
+else if (start === 'battle') dbg = startBattle(params.get('ai') === '1')
+else if (start === 'demo') {
+  dbg = startCampaign()
+  dbg.players[0].isAI = true
+}
+if (dbg) {
+  const steps = parseInt(params.get('steps') ?? '0')
+  const idle = { dir: null as Dir | null, bomb: false, detonate: false }
+  for (let i = 0; i < steps; i++) dbg.update(1 / 60, { p1: idle, p2: idle })
+}
+
 requestAnimationFrame(loop)

@@ -1,4 +1,5 @@
 import type { Dir } from './constants'
+import { audio } from './audio'
 
 export interface PlayerInput {
   dir: Dir | null
@@ -50,7 +51,8 @@ class InputManager {
       return
     }
     if (e.code === 'KeyM') {
-      this.onMenuNav?.('back')
+      if (this.inMenu) this.onMenuNav?.('back')
+      else audio.toggleMute()
       return
     }
 
