@@ -118,6 +118,11 @@
     #hud .timer { font-size: clamp(16px, 2.6vw, 22px); font-weight: 900; }
     #hud .timer.danger { color: #ff5252; animation: pulse 1s infinite; }
     @keyframes pulse { 50% { opacity: .4; } }
+    @keyframes logopulse {
+      0%, 100% { filter: drop-shadow(0 0 18px rgba(0,229,255,.45)); }
+      50% { filter: drop-shadow(0 0 30px rgba(0,229,255,.8)); }
+    }
+    #ui-title .logo { animation: logopulse 2.6s ease-in-out infinite; }
     @keyframes hsglow {
       0%, 100% { text-shadow: 0 0 8px var(--gold), 0 0 18px rgba(255,213,74,.5); }
       50% { text-shadow: 0 0 16px var(--gold), 0 0 34px rgba(255,213,74,.9); }

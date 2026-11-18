@@ -595,6 +595,7 @@ export class Game {
     if (this.killChain === 2) this.particles.text(360, 150, 'DOUBLE KILL!', '#ff2e88')
     else if (this.killChain === 3) this.particles.text(360, 150, 'TRIPLE KILL!', '#ffd54a')
     else if (this.killChain >= 4) this.particles.text(360, 150, `MEGA BLAST ×${this.killChain}!`, '#ff5252')
+    if (this.killChain >= 2) audio.play('combo')
     audio.play('boom')
     if (smash) this.shake(6, 0.25)
   }

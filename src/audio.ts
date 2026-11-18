@@ -6,6 +6,7 @@ type SfxName =
   | 'step' | 'bomb' | 'boom' | 'boomBig' | 'powerup' | 'hurt'
   | 'menuMove' | 'menuSelect' | 'levelClear' | 'gameOver'
   | 'freeze' | 'kick' | 'exit' | 'spawn' | 'shield' | 'count'
+  | 'combo' | 'tick'
 
 class AudioEngine {
   private ctx: AudioContext | null = null
@@ -183,6 +184,14 @@ class AudioEngine {
         break
       case 'count':
         this.tone(880, 0.08, { vol: 0.15, dest: g })
+        break
+      case 'combo':
+        // rising two-note ping for multi-kill combos
+        this.tone(660, 0.07, { type: 'square', vol: 0.16, dest: g })
+        this.tone(990, 0.12, { type: 'square', vol: 0.16, when: 0.06, dest: g })
+        break
+      case 'tick':
+        this.tone(1200, 0.04, { type: 'square', vol: 0.08, dest: g })
         break
     }
   }

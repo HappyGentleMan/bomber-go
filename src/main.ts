@@ -14,6 +14,7 @@ let appState: 'title' | 'playing' | 'paused' = 'title'
 let game: Game | null = null
 let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
+let lastTickSecond = -1
 
 // ---------- layout ----------
 
@@ -38,6 +39,7 @@ function startCampaign(): Game {
   game = new Game('campaign')
   wireGame()
   appState = 'playing'
+  lastTickSecond = -1
   ui.show(null)
   ui.banner('LEVEL 1', 1.2)
   audio.setTrack('game')
@@ -49,6 +51,7 @@ function startBattle(aiP2: boolean): Game {
   game = new Game('battle', { aiPlayer2: aiP2 })
   wireGame()
   appState = 'playing'
+  lastTickSecond = -1
   battleOpts = { aiPlayer2: aiP2, attract: false }
   ui.show(null)
   ui.banner('BATTLE!', 1.2)
@@ -75,6 +78,7 @@ function wireGame() {
         break
       case 'nextlevel':
         ui.show(null)
+        lastTickSecond = -1
         ui.banner(`LEVEL ${data.level}`, 1.2)
         break
       case 'gameover':
@@ -193,6 +197,12 @@ function hudUpdate() {
   if (!game || appState === 'title') { ui.hudSet(null); return }
   const p = game.players[0]
   const remaining = game.levelTime - game.time
+  // urgency tick under 30s (once per second)
+  const sec = Math.max(0, Math.ceil(remaining))
+  if (remaining < 30 && sec !== lastTickSecond) {
+    lastTickSecond = sec
+    audio.play('tick')
+  }
   let playerHtml = ''
   if (game.mode === 'campaign') {
     const hearts = '❤'.repeat(Math.max(0, game.lives))
