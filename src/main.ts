@@ -92,7 +92,7 @@ function wireGame() {
         if (game!.attract) {
           window.setTimeout(startAttract, 1500)
         } else {
-          ui.showBattleOver(data.winner)
+          ui.showBattleOver(data.winner, [game!.players[0].kills, game!.players[1].kills], battleOpts.aiPlayer2)
           ui.show('battleover')
           appState = 'title'
         }

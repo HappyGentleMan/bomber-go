@@ -173,13 +173,16 @@ export class UI {
       `LEVEL ${level} CLEARED<br>BONUS +${bonus.toLocaleString()} · TOTAL ${score.toLocaleString()}<br>❤ ×${lives}`
   }
 
-  showBattleOver(winner: number) {
+  showBattleOver(winner: number, kills?: [number, number], cpu = false) {
     const el = $('battle-result')
+    const name1 = 'PLAYER 1', name2 = cpu ? 'CPU' : 'PLAYER 2'
     if (winner === -1) { el.textContent = 'DRAW!'; el.style.setProperty('-webkit-text-fill-color', '#888') }
     else {
-      el.textContent = winner === 0 ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS'
+      el.textContent = winner === 0 ? `${name1} WINS` : `${name2} WINS`
       el.style.setProperty('-webkit-text-fill-color', winner === 0 ? '#00e5ff' : '#ff2e88')
     }
+    const stats = $('battle-stats')
+    if (stats) stats.textContent = kills ? `KILLS  ${kills[0]} — ${kills[1]}` : ''
   }
 }
 
