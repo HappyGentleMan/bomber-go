@@ -184,6 +184,26 @@ export function generateLevel(level: number): LevelDef {
     ...enemySpawns,
   ], { col: 1, row: 1 })
 
+  // connectivity carving (for powerups / enemy spawns) can route THROUGH the
+  // exit's brick, converting it to walk. The portal is only revealed by
+  // destroyBrick (bricks), so an exit left on a walk tile can NEVER appear
+  // and the level is un-clearable. Re-hide it under a fresh intact brick —
+  // the same fix the powerup re-hide below applies to items. (Measured:
+  // 52.8% of generated levels had the exit exposed on a walk tile.)
+  if (grid[exit.row][exit.col].t !== T_SOFT) {
+    const opts = softCells.filter(sc =>
+      grid[sc.row][sc.col].t === T_SOFT &&
+      !powerups.some(o => o.col === sc.col && o.row === sc.row))
+    if (opts.length) {
+      const sc = opts[rnd(opts.length)]
+      exit.col = sc.col; exit.row = sc.row
+    } else {
+      // no other intact brick — re-brick the exit cell itself (the carved
+      // walk path to it still stands, so the portal stays reachable)
+      grid[exit.row][exit.col].t = T_SOFT
+    }
+  }
+
   // connectivity carving can open up a brick that was hiding an item
   // (the path passes through it). Re-hide those items under another intact
   // brick so they're only revealed when the player breaks a wall.

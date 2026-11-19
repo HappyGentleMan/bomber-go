@@ -363,6 +363,25 @@ or any phone) gathers host candidates and will connect. **To test end-to-end:
 open two windows of the game in a real browser, Create a room in one, Join with
 the code in the other.**
 
+## Career exit portal: always under a reachable brick (this round)
+
+Player report: "in career, sometimes there is no portal to the next level".
+Root cause (`test/exit.ts`): **52.8% of generated levels had the exit NOT
+under a brick.** `ensureConnectivity` carves walk paths to powerups / enemy
+spawns, and those paths routed *through* the exit's brick, converting it to a
+walk tile. The portal is only revealed by `destroyBrick` (bricks), so an exit
+left on a walk tile could never appear — the level was un-clearable. The code
+already re-hid *powerups* exposed this way, but had no equivalent for the exit
+(a second, rarer cause: the exit landing on a spawn-corner brick that
+`clearSpawnCorner` clears).
+
+Fix: after `ensureConnectivity`, if the exit cell is no longer `T_SOFT`,
+re-hide it under a fresh intact brick (same pattern as the powerup re-hide),
+falling back to re-bricking the exit cell itself (its carved path still
+stands). Verified: `test/exit.ts` 2000 levels → 0 exposed, 0 unreachable;
+`test/clearmech.ts` 60 levels → brick→reveal→clear 60/60; smoke suite now
+asserts no hidden item **or exit** is exposed on a walk tile (60 maps).
+
 ## One thing left for you: push to GitHub
 
 Keychain auth can't be driven from this environment (the GUI prompt can't appear).

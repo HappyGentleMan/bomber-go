@@ -181,16 +181,20 @@ console.log('— Hidden powerups in destructible bricks —')
     check(`level ${lvl}: breaking the brick reveals it`, now?.revealed === true, `revealed=${now?.revealed}`)
   }
   check('campaign levels hide items in bricks (6 levels sampled)', tested > 0, `tested=${tested}`)
-  // stress: NO hidden item may be exposed on a walk tile (campaign + battle)
+  // stress: NO hidden item (or the exit) may be exposed on a walk tile
+  // (campaign + battle). The exit was the one that slipped through: carving
+  // for powerups/enemies routed through its brick, and with no brick under
+  // it the portal could never reveal (52.8% of levels were un-clearable)
   let exposed = 0, maps = 0
   for (let i = 0; i < 60; i++) {
     maps++
     const g = new Game('campaign')
     for (const u of g.powerups) if (!u.revealed && g.grid[u.row][u.col].t !== 2) exposed++
+    if (g.grid[g.exit.row][g.exit.col].t !== 2) exposed++
     const b = new Game('battle', { aiPlayer2: true, attract: true })
     for (const u of b.powerups) if (!u.revealed && b.grid[u.row][u.col].t !== 2) exposed++
   }
-  check('no hidden item exposed on walk tiles (60 maps)', exposed === 0, `exposed=${exposed}`)
+  check('no hidden item/exit exposed on walk tiles (60 maps)', exposed === 0, `exposed=${exposed}`)
 }
 
 console.log('— Campaign bot run (invincible, 60s) —')
