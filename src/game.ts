@@ -230,6 +230,8 @@ export class Game {
       if (e.isAI !== undefined) return (e.wallpassUntil ?? 0) > this.time
       return ENEMY_DEFS[e.type!].wallpass
     }
+    // sealed pocket: no AI entry (see sealedPocket / tileSolidFor)
+    if (e.isAI !== undefined && this.sealedPocket(c, r)) return false
     if (this.bombAt(c, r)) return false
     if (this.enemyAt(c, r)) return e.isAI === undefined // enemy may enter player tile (kills); player can't enter enemy tile
     if (e.isAI !== undefined && this.mode === 'battle') {
@@ -339,6 +341,11 @@ export class Game {
       if (e.isAI !== undefined) return (e.wallpassUntil ?? 0) <= this.time
       return !ENEMY_DEFS[e.type!].wallpass
     }
+    // a sealed pocket is solid for AI players even on its walkable centre
+    // tile: the only entry is a brick (wallpass), and once the timed
+    // wallpass expires the bot can never get out (see sealedPocket). Humans
+    // keep the choice — it is their trap to spring
+    if (e.isAI !== undefined && this.sealedPocket(c, r)) return true
     if (this.bombAt(c, r)) return true
     return false
   }
@@ -356,6 +363,12 @@ export class Game {
         // a bomb the entity is already standing in doesn't block the way out
         // (entry is still blocked; this only lets a mid-tile bomb drop phase out)
         if (this.bombAt(c, r) && c >= pc0 && c <= pc1 && r >= pr0 && r <= pr1) continue
+        // a brick the entity is already standing in must not trap it: wallpass
+        // can expire mid-tile (the box entered while bricks were passable),
+        // and without this the box is wedged FOREVER — every candidate step
+        // overlaps the now-solid brick, so all four canStep read false and the
+        // bot stands pinned for the rest of the match. Entry is still blocked
+        if (this.tile(c, r) === T_SOFT && c >= pc0 && c <= pc1 && r >= pr0 && r <= pr1) continue
         return true
       }
     return false
@@ -668,7 +681,7 @@ export class Game {
     return null
   }
 
-  bfs(sc: number, sr: number, tc: number, tr: number, passSoft: boolean, avoid?: Set<number>): { x: number; y: number }[] | null {
+  bfs(sc: number, sr: number, tc: number, tr: number, passSoft: boolean, avoid?: Set<number>, pocketFree?: boolean): { x: number; y: number }[] | null {
     if (sc === tc && sr === tr) return []
     const prev = new Map<number, number>()
     const q: number[] = [key(sc, sr)]
@@ -685,6 +698,9 @@ export class Game {
         const t = this.tile(nx, ny)
         if (t === T_HARD) continue
         if (t === T_SOFT && !passSoft) continue
+        // a sealed pocket is a one-way death trap for a timed-wallpass AI:
+        // route AROUND it, never INTO it (see sealedPocket)
+        if (pocketFree && this.sealedPocket(nx, ny)) continue
         if (this.bombAt(nx, ny)) continue
         const k = key(nx, ny)
         if (seen.has(k)) continue
@@ -1096,7 +1112,7 @@ export class Game {
 
   // ---------------- AI (battle bot + attract) ----------------
 
-  private aiState = new Map<number, { path: { x: number; y: number }[]; i: number; repath: number; tc: number; tr: number; noBricks: Set<number>; kind?: 'pursuit' | 'escape'; standoff?: boolean; detouring?: boolean; triedLineup?: Set<number> }>()
+  private aiState = new Map<number, { path: { x: number; y: number }[]; i: number; repath: number; tc: number; tr: number; noBricks: Set<number>; kind?: 'pursuit' | 'escape'; standoff?: boolean; detouring?: boolean; triedLineup?: Set<number>; detourBrick?: number }>()
   /** per-AI progress tracker for stall detection (see end of aiThinkImpl) */
   private aiStall = new Map<number, { x: number; y: number; ticks: number }>()
 
@@ -1108,6 +1124,23 @@ export class Game {
     const out = { dir: null as Dir | null, bomb: false, detonate: false }
     if (!p.alive) return out
     const enemy = this.players.find(q => q.id !== p.id && q.alive)
+    // a temporary brick detour (detourBrick — set when the path head is a
+    // brick we can't bomb because the slot is full) is only needed while we
+    // are at the brick. Clear it once we've moved on (>2 tiles) or the brick
+    // is gone; without this the bot would route around the brick for the rest
+    // of the match. NOTE: it is deliberately NOT cleared when the bomb slot
+    // frees — the detour is usually the cheaper option (a bomb costs 2.6s of
+    // fuse; a 2-4 tile swing is ~1s and keeps the slot free for an attack),
+    // and the next repath re-evaluates bomb-vs-detour from a fresh position
+    {
+      const stTop = this.aiState.get(p.id)
+      if (stTop && stTop.detourBrick !== undefined) {
+        const bc = stTop.detourBrick % COLS, br = Math.floor(stTop.detourBrick / COLS)
+        const far = Math.abs(bc - p.col) + Math.abs(br - p.row) > 2
+        const gone = this.tile(bc, br) !== T_SOFT
+        if (far || gone) this.aiState.set(p.id, { ...stTop, detourBrick: undefined })
+      }
+    }
     // nearest living enemy (campaign)
     let nearest: { col: number; row: number } | null = null
     let nearestD = 999
@@ -1295,13 +1328,16 @@ export class Game {
             }
           } else {
             const lu = this.lineupTarget(p, enemy, allBlasts, st?.noBricks, st?.triedLineup)
-            const det = lu ?? this.detourTarget(p, st, allBlasts, 8)
+            const det = lu ?? this.detourTarget(p, st, allBlasts, 8, enemy)
             detouring = det !== null && lu === null
             target = det ?? { c: p.col, r: p.row }
           }
         } else if (nearestD > 6) {
-          // far away: detour for a nearby powerup (flame first — longer flame = kills)
-          const det = this.detourTarget(p, st, allBlasts, 8)
+          // far away: close in. Detour only for a powerup ON THE WAY to the
+          // enemy (flame first — longer flame = kills); the old rule grabbed
+          // any powerup within 8 tiles, so the bot looted the far side of
+          // the map and never engaged
+          const det = this.detourTarget(p, st, allBlasts, 8, enemy)
           if (det) target = det
         }
       }
@@ -1329,13 +1365,6 @@ export class Game {
       const h = st.path[st.i]
       offPath = (h.x - p.x) ** 2 + (h.y - p.y) ** 2 > 2.25
     }
-    // while inside our own bomb's blast, keep the escape route (a repath to
-    // the pursuit target would lead straight back into the flame)
-    // box-aware: the centre tile can read "safe" while the box is still
-    // half inside our own blast
-    const box = [...this.boxTiles(p)]
-    const inOwnBlast = this.bombs.some(b => b.owner === p.id
-      && box.some(k => this.blastSet(b.col, b.row, b.power).has(k)))
     // a brick we can't blow up (no safe escape from our blast) is a dead
     // end: BFS allows soft bricks on the theory that the bot bombs them when
     // it reaches them, but if it can't, the bot used to square-wave along
@@ -1363,17 +1392,29 @@ export class Game {
     for (const k of st2.noBricks) {
       if (this.tile(k % COLS, Math.floor(k / COLS)) === T_SOFT) avoid.add(k)
     }
-    // while one of our OWN bombs is still live, no repath to pursuit: the
-    // box may have geometrically left the blast set already, but the flame
-    // is still scheduled to land, and the pursuit target is often on the
-    // far side of that blast — repathing there walked the bot back through
-    // the blast just as the flame landed (the corridor deaths). out.bomb
-    // counts too: on the placement tick the bomb is not in this.bombs yet
-    // (tryPlaceBomb runs after aiThink), so ownBombLive is blind to it and
-    // the repath routed straight through the about-to-exist blast
-    const ownBombLive = myBombs.length > 0 || out.bomb
-    if (!ownBombLive && !inOwnBlast && (forceReplan || !st || this.time > st2.repath || drift > 2 || offPath || !this.pathValid(st2, avoid))) {
-      const path = this.bfs(p.col, p.row, target.c, target.r, true, avoid) ?? []
+    // temporary brick detour: a brick we were parked at with a full bomb
+    // slot — routed around until the slot frees (cleared at the top)
+    if (st2.detourBrick !== undefined && this.tile(st2.detourBrick % COLS, Math.floor(st2.detourBrick / COLS)) === T_SOFT) {
+      avoid.add(st2.detourBrick)
+    }
+    // Repath policy while a bomb of ours is live. The BFS below avoids the
+    // FULL blast of every live bomb (avoid = allBlasts), so a pursuit path
+    // routes AROUND our own flame — the bot keeps closing in on the player
+    // through the 2.6s fuse instead of parking at the safe haven (the old
+    // blanket suppression idled it ~79% of bomb-live time; the top
+    // Pommerman agents all keep pressing after the bomb). The only remaining
+    // suppression is the placement tick (out.bomb — the bomb is not in
+    // this.bombs yet, so allBlasts is blind to its blast and the path would
+    // route through it). Note: inOwnBlast used to suppress repaths while the
+    // box overlapped our own blast ring, but the box is 0.6 wide, so ANY
+    // tile adjacent to the ring counts — and the escape route always ends
+    // on such a tile. That pinned the bot in its own blast for the whole
+    // fuse with no repath and (via the standoff hold) no motion. The BFS
+    // avoid-set already keeps paths out of the ring, and live fire is
+    // handled by the threatDir early return above. In a sealed ring the BFS
+    // simply finds no route and returns null: the bot wanders out
+    if (!out.bomb && (forceReplan || !st || this.time > st2.repath || drift > 2 || offPath || !this.pathValid(st2, avoid))) {
+      const path = this.bfs(p.col, p.row, target.c, target.r, true, avoid, true) ?? []
       // a standoff target BFS can't reach is a dead end: remember it so the
       // next pick falls to the next fallback (line-up → detour → hold)
       // instead of re-planning to the same unreachable tile every 0.9s
@@ -1384,7 +1425,7 @@ export class Game {
         tried = new Set(tried)
         tried.add(key(target.c, target.r))
       }
-      this.aiState.set(p.id, { path, i: 0, repath: this.time + 0.9, tc: target.c, tr: target.r, noBricks: st2.noBricks, kind: 'pursuit', standoff, detouring, triedLineup: tried })
+      this.aiState.set(p.id, { path, i: 0, repath: this.time + 0.9, tc: target.c, tr: target.r, noBricks: st2.noBricks, kind: 'pursuit', standoff, detouring, triedLineup: tried, detourBrick: st2.detourBrick })
     }
     const s = this.aiState.get(p.id)!
     // skip waypoints already reached (or passed — free movement straddles
@@ -1417,14 +1458,44 @@ export class Game {
       const dir = nd ?? this.steer(p, h.x, h.y)
       const isBrick = this.tile(h.x, h.y) === T_SOFT
       const canBombNow = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.canSurviveBomb(p)
-      if (isBrick && canBombNow) {
-        // brick on the path: bomb it (own-tile bomb burns adjacent bricks)
-        out.bomb = true
+      if (isBrick && s.kind === 'pursuit' && canBombNow) {
+        // brick on a PURSUIT path: bomb it ONLY if it is the cheapest way
+        // through. A bomb costs ~2.6s of fuse + escape ≈ 13 tile-steps and
+        // burns the bomb slot; a short swing around (≤10 steps) gets the bot
+        // to the player faster AND keeps the slot free for an attack bomb.
+        // "Bomb every brick on the path" made the bot a brick-clearing
+        // machine: 40+ bombs per match, 2% of them near the player, while
+        // the player walked away
+        const avoidBrick = new Set(avoid)
+        avoidBrick.add(key(h.x, h.y))
+        const swing = this.bfs(p.col, p.row, s.tc, s.tr, true, avoidBrick, true)
+        if (swing && swing.length <= 10) {
+          // walk around: adopt the swing as the path and keep the brick
+          // blocked (detourBrick) so the next repath doesn't re-plan back
+          // through it; the bomb-vs-detour call re-runs from the new
+          // position at each repath
+          this.aiState.set(p.id, { ...s, path: swing, i: 0, repath: this.time + 0.9, detourBrick: key(h.x, h.y) })
+          out.dir = this.steer(p, swing[0].x, swing[0].y)
+        } else {
+          out.bomb = true
+        }
       } else if (isBrick && !canBombNow && (h.x - p.x) ** 2 + (h.y - p.y) ** 2 < 1.2) {
-        // a brick we can't blow up (bomb slot busy, no safe escape) is right
-        // in front of us: hold position and wait for the slot. Steering at
-        // the brick edge made the bot jiggle at 60Hz — the last tremor
-        out.dir = null
+        // brick right in front of us that we can't bomb RIGHT NOW. Two cases:
+        // - bomb slot full: a TEMPORARY block. Parking here (the old
+        //   behaviour) sat the bot in the player's line of fire for the whole
+        //   2.6s fuse — it got shot. Set a temporary detour: the next repath
+        //   routes around the brick, the bot keeps closing in, and when the
+        //   slot frees the detour is cleared (top of aiThink) and the brick
+        //   gets bombed from the path head
+        // - no safe escape from our blast: a GENUINE block — hold (steering
+        //   at the brick edge made the bot jiggle at 60Hz)
+        if (myBombs.length >= p.bombs) {
+          const db = key(h.x, h.y)
+          if (s.detourBrick !== db) this.aiState.set(p.id, { ...s, detourBrick: db, path: [], i: 0 })
+          out.dir = null
+        } else {
+          out.dir = null
+        }
       } else {
         out.dir = dir
       }
@@ -1446,8 +1517,15 @@ export class Game {
       // at the standoff with the enemy: hold position. Wandering from the
       // standoff walked the bot back toward the enemy, the dead band
       // re-planned it to the backoff point, and it ping-ponged a 3-tile
-      // corridor forever
-      if (enemy && standoff) {
+      // corridor forever. EXCEPTION: when the stored target is our OWN tile
+      // — the kill position is blocked by a live blast, or we are standing
+      // ON it and can't bomb (a mutual-kill position: the cross seals all
+      // four neighbours) — holding freezes the bot in place: the path is
+      // empty, every repath re-picks the same own-tile target, and the bot
+      // just stares at the player for seconds while they walk away. Wander
+      // (blast-avoiding) so the bot steps off and re-approaches from a
+      // survivable angle
+      if (enemy && standoff && !(s.tc === p.col && s.tr === p.row)) {
         out.dir = null
       } else {
         let dir: Dir | null = null
@@ -1469,8 +1547,13 @@ export class Game {
     // corridor that was the enemy's own tile, and the bot walked into the
     // enemy, got pinned, and burned in its own blast
     if (out.bomb) {
-      const route = this.survivalRoute(p, true) ?? this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
-      if (route) this.aiState.set(p.id, { path: route, i: 0, repath: this.time + 0.9, tc: route[route.length - 1].x, tr: route[route.length - 1].y, noBricks: this.aiState.get(p.id)?.noBricks ?? new Set(), kind: 'escape', standoff, detouring, triedLineup: this.aiState.get(p.id)?.triedLineup })
+      // after the bomb the escape route should ADVANCE toward the opponent,
+      // not retreat to the nearest safe corner (which is often behind us) —
+      // that ping-ponged the bot with no net progress. The haven is still
+      // safe by construction (survivalRoute only picks non-burning tiles)
+      const pref = enemy ? { c: enemy.col, r: enemy.row } : undefined
+      const route = this.survivalRoute(p, true, pref) ?? this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
+      if (route) this.aiState.set(p.id, { path: route, i: 0, repath: this.time + 0.9, tc: route[route.length - 1].x, tr: route[route.length - 1].y, noBricks: this.aiState.get(p.id)?.noBricks ?? new Set(), kind: 'escape', standoff, detouring, triedLineup: this.aiState.get(p.id)?.triedLineup, detourBrick: this.aiState.get(p.id)?.detourBrick })
     }
     // stall detection: commanded a direction but made no progress for ~0.3s
     // → the stored path is stale (the world changed under it — a sealed
@@ -1537,7 +1620,7 @@ export class Game {
     }
     if (safeK < 0) return null
     const sc = safeK % COLS, sr = Math.floor(safeK / COLS)
-    const path = this.bfs(p.col, p.row, sc, sr, true, blast)
+    const path = this.bfs(p.col, p.row, sc, sr, true, blast, true)
     if (path) return path
     // sealed in by the blast: there is no safe route. Returning a fake
     // single-tile route here used to make blastEscape() claim the bot could
@@ -1641,6 +1724,7 @@ export class Game {
       const de = Math.abs(c - enemy.col) + Math.abs(r - enemy.row)
       if (de < 2 || de > p.flame + 1) return
       if (this.tile(c, r) === T_HARD) return
+      if (this.sealedPocket(c, r)) return
       if (allBlasts.has(key(c, r))) return
       if (noBricks?.has(key(c, r))) return
       if (tried?.has(key(c, r))) return
@@ -1652,11 +1736,19 @@ export class Game {
     return found
   }
 
-  private detourTarget(p: PlayerState, st: { tc: number; tr: number; noBricks?: Set<number> } | undefined, allBlasts: Set<number>, maxD: number): { c: number; r: number } | null {
+  private detourTarget(p: PlayerState, st: { tc: number; tr: number; noBricks?: Set<number> } | undefined, allBlasts: Set<number>, maxD: number, onTheWayTo?: { col: number; row: number }): { c: number; r: number } | null {
     const nb = st?.noBricks
+    // battle: a detour is only worth it if the powerup is roughly ON THE WAY
+    // to the enemy — otherwise the bot loots the far side of the map and
+    // never engages (measured: 9+ tiles from the player for 10s at a time,
+    // closing in on 0% of ticks). The slack (+2) tolerates a short swing
+    const onWay = (c: number, r: number) => !onTheWayTo
+      || Math.abs(c - onTheWayTo.col) + Math.abs(r - onTheWayTo.row)
+        <= Math.abs(p.col - onTheWayTo.col) + Math.abs(p.row - onTheWayTo.row) + 2
     if (st && this.powerups.some(u => u.col === st.tc && u.row === st.tr)
       && this.tile(st.tc, st.tr) !== T_HARD && !allBlasts.has(key(st.tc, st.tr))
-      && !nb?.has(key(st.tc, st.tr))) {
+      && !this.sealedPocket(st.tc, st.tr)
+      && !nb?.has(key(st.tc, st.tr)) && onWay(st.tc, st.tr)) {
       return { c: st.tc, r: st.tr }
     }
     let best = 99, bestPrio = 9
@@ -1668,7 +1760,10 @@ export class Game {
       // chasing it with no valid path made the bot drift back and forth
       // across the blast edge forever
       if (allBlasts.has(key(u.col, u.row))) continue
+      // a powerup inside a sealed pocket is uncollectable (see sealedPocket)
+      if (this.sealedPocket(u.col, u.row)) continue
       if (nb?.has(key(u.col, u.row))) continue
+      if (!onWay(u.col, u.row)) continue
       const prio = (u.kind === 'flame' && p.flame < 3) ? 0
         : (u.kind === 'bomb' && p.bombs < 2) ? 1 : 2
       if (prio < bestPrio || (prio === bestPrio && d < best)) {
@@ -1705,6 +1800,7 @@ export class Game {
         standoff: this.aiState.get(p.id)?.standoff,
         detouring: this.aiState.get(p.id)?.detouring,
         triedLineup: this.aiState.get(p.id)?.triedLineup,
+        detourBrick: this.aiState.get(p.id)?.detourBrick,
       })
       return this.steer(p, route[0].x, route[0].y)
     }
@@ -1884,7 +1980,7 @@ export class Game {
    *  phantom at p's CURRENT tile made that tile unstandable, so every
    *  re-plan from a straddling box picked the opposite neighbour and the
    *  bot ping-ponged across the blast ring until the flame landed */
-  private survivalRoute(p: PlayerState, placing: boolean = false): { x: number; y: number }[] | null {
+  private survivalRoute(p: PlayerState, placing: boolean = false, preferTarget?: { c: number; r: number }): { x: number; y: number }[] | null {
     const STEP = 240 // ms per tile at PLAYER_BASE_SPEED
     const HORIZON = 14
     // which tiles are on fire at each step: current flames (from now until
@@ -1936,8 +2032,13 @@ export class Game {
       seen.add(k * 100)
       q.push(k * 100)
     }
-    let qi = 0, found = -1
-    while (qi < q.length && found < 0) {
+    let qi = 0
+    // collect EVERY reachable safe haven, not just the first: the nearest
+    // one is often BEHIND the bot, so "bomb → retreat to it → re-approach →
+    // bomb" ping-ponged with no net progress. With a preferTarget we pick
+    // the haven that advances toward the player instead
+    const safeStates: number[] = []
+    while (qi < q.length) {
       const st = q[qi++]
       const s = st % 100, k = Math.floor(st / 100)
       if (s >= HORIZON) continue
@@ -1952,11 +2053,31 @@ export class Game {
         if (seen.has(st2)) continue
         seen.add(st2)
         prev.set(st2, st)
-        if (safe(nk)) { found = st2; break }
+        if (safe(nk)) safeStates.push(st2)
         q.push(st2)
       }
     }
-    if (found < 0) return null
+    if (!safeStates.length) return null
+    // default / fallback: the shallowest safe haven
+    let found = safeStates[0]
+    for (const st of safeStates) if (st % 100 < found % 100) found = st
+    if (preferTarget) {
+      // advance toward the fight, but do NOT walk into the enemy's blast
+      // zone. The haven must be CLOSER to the enemy than we are now (net
+      // progress — the old nearest-haven retreated behind us with no
+      // progress) yet at least 2 tiles out (a bomb at 1-2 tiles is a mutual
+      // kill; the un-constrained "closest haven to the enemy" glued the bot
+      // to a corner opponent and it burned in its own follow-up bomb)
+      const botD = Math.abs(p.col - preferTarget.c) + Math.abs(p.row - preferTarget.r)
+      let best = Infinity
+      for (const st of safeStates) {
+        const k = Math.floor(st / 100)
+        const dT = Math.abs(k % COLS - preferTarget.c) + Math.abs(Math.floor(k / COLS) - preferTarget.r)
+        if (dT < 2 || dT >= botD) continue
+        const score = dT * 10 + (st % 100)
+        if (score < best) { best = score; found = st }
+      }
+    }
     // reconstruct the spatial path (drop consecutive repeats from waits,
     // and the start tile)
     const path: { x: number; y: number }[] = []
@@ -1974,9 +2095,26 @@ export class Game {
     return path.length ? path : null
   }
 
-  /** true if, after placing a bomb on p's tile, p can survive every live
+   /** true if, after placing a bomb on p's tile, p can survive every live
    *  fuse (see survivalRoute) */
   private canSurviveBomb(p: PlayerState): boolean {
     return this.survivalRoute(p, true) !== null
+  }
+
+  /** a walkable tile fully enclosed by bricks / hard walls. The only way in
+   *  is through a brick (wallpass), and the only way out is through a brick.
+   *  For an AI with a TIMED wallpass this is a death trap: when the powerup
+   *  expires the bot is sealed in — no walkable exit, and no survivable bomb
+   *  either (the blast reaches the brick exits on the same step the bricks
+   *  break, so canSurviveBomb is false and the stall-bomb never fires). The
+   *  bot just parks in there until the player wanders by with a bomb.
+   *  Humans keep the choice; enemies have permanent wallpass and can leave */
+  private sealedPocket(c: number, r: number): boolean {
+    if (this.tile(c, r) !== T_WALK) return false
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const t = this.tile(c + dc, r + dr)
+      if (t !== T_HARD && t !== T_SOFT) return false
+    }
+    return true
   }
 }

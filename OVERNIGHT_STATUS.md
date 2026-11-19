@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, late · **State: battle AI aggression round, all tests green, ready to push**
+**Last updated:** Nov 19 · **State: battle AI active-play round, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,70 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Battle AI active play: press the attack (this round)
+
+Player feedback: "the AI just places a bomb then gets away to the next safe
+area — it isn't actively playing with the player, not fun". Researched how
+the top agents actually play (Pommerman Skynet, the NeurIPS-2018 winner
+Osogami, HLPlayer): **safety is a constraint/filter, not the objective** —
+after a bomb you keep walking toward the fight, you never idle, and the top
+agents press through the fuse.
+
+Measured the idling (`test/engage.ts`, bot vs a simple live player, 120s):
+avg distance **15.2 tiles, 0% of ticks within 6, 79% of bomb-live time idle,
+0% of bombs within 4 tiles of the player**. A bomb-and-hide machine.
+
+Fixes (all in `src/game.ts`):
+
+- **No blanket repath suppression while a bomb is live** — only the
+  placement tick suppresses. The bot keeps closing in through the 2.6s fuse
+  (the BFS already routes around the blast ring).
+- **Bomb-vs-detour at the path head** — a bomb costs ~2.6s fuse + escape
+  (≈13 tile-steps) and burns the bomb slot, so the bot now swings *around*
+  a brick (≤10-step detour, `detourBrick` keeps it avoided until we move
+  on) whenever that is cheaper, and only bombs when the swing is too long.
+  Ends the brick-clearing machine.
+- **Forward-biased escape route** — after a bomb, `survivalRoute` collects
+  *all* reachable safe havens and picks the one that advances toward the
+  opponent (closer than we are now, ≥2 tiles out). The plain nearest haven
+  retreated behind with no net progress; the unconstrained "closest to the
+  enemy" glued the bot to a corner opponent and it burned in its own
+  follow-up bomb (caught by the death probe).
+- **Sealed-pocket death trap** — the bot used to walk through a wallpass
+  brick into a 1-tile pocket (walls left/right, bricks up/down); when the
+  10s wallpass expired it was sealed in with no walkable exit and no
+  survivable bomb (the blast reaches the brick exits the same step they
+  break, so the stall-bomb never fires). `sealedPocket` now marks such
+  tiles solid for AI players across physics + BFS + target selection — the
+  bot routes around.
+- **Wallpass-expiry un-wedge** — `boxHits` exit tolerance extended from
+  bombs to bricks: a brick the box already stands in no longer traps it
+  (wallpass can expire mid-tile).
+- **Standoff hold no longer freezes on our own tile** (mutual-kill
+  position) — the bot wanders off and re-approaches from a survivable angle.
+- **No own-blast-ring pin** — the 0.6-wide box made *any* tile adjacent to
+  the ring "inside", so the `inOwnBlast` repath gate pinned the bot for the
+  whole fuse; removed (BFS avoid-set + threat override handle it).
+- **Powerup detours must be on the way** — battle detours only for a
+  powerup where `dist(enemy,pu) ≤ dist(enemy,bot)+2`; the old rule looted
+  the far side of the map (9+ tiles out for 10s, closing in 0% of ticks).
+
+**Results (headless):**
+
+- engage (6×120s vs a live player): avg distance 15.2 → **4.6–6.8**, bombs
+  within 4 tiles of the player 0% → **39–100%**, kills 0 → **2–14/match**
+  (5 of 6 seeds)
+- twitch (8×60s): **0 deaths**, 101 turns/min, 49 U-turns/min
+- death probe: 6 clean 120s runs; stuck: 0–1 episodes/90s (cross-map delay,
+  not freezes); jam probe: 0 wedges (6×60s)
+- smoke (38 checks) + aggr (150s: both AIs press — 250/190 kill-opportunity
+  ticks) + production build green
+
+New harnesses: `test/engage.ts` (distance buckets, closing ticks,
+idle-while-bomb-live, bombs-near-player %), `test/stuck.ts` (stuck-episode
+tracer + state log), `test/jam.ts` (movement-jam probe with map dump),
+`test/ttarget.ts` (target trace).
 
 ## Battle AI aggression: survivability-based bombing (this round)
 
@@ -308,7 +372,7 @@ In a real Terminal:
 zsh /Users/anson/.local/share/opencode/gh-setup.sh
 ```
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (58 commits).
+That creates the `HappyGentleMan/bomber-go` repo and pushes (57 commits).
 See `PUSH_TO_GITHUB.md` for details / manual steps.
 
 ## Play
