@@ -212,6 +212,24 @@
     #t-down  { grid-column: 2; grid-row: 2; }
     #t-right { grid-column: 3; grid-row: 2; }
     #t-actions { grid-template-rows: auto auto; gap: 10px; justify-items: center; }
+    /* virtual joystick (default mobile movement) */
+    #joy-base {
+      width: 128px; height: 128px; border-radius: 50%;
+      border: 2px solid rgba(0,229,255,.35);
+      background: rgba(10,16,32,.6);
+      box-shadow: 0 4px 14px rgba(0,0,0,.45), inset 0 0 18px rgba(0,229,255,.08);
+      position: relative; touch-action: none; cursor: grab;
+    }
+    #joy-knob {
+      position: absolute; left: 50%; top: 50%;
+      width: 56px; height: 56px; margin: -28px 0 0 -28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(0,229,255,.55), rgba(0,229,255,.14));
+      border: 2px solid rgba(0,229,255,.6);
+      box-shadow: 0 2px 10px rgba(0,0,0,.5);
+    }
+    body.joy #t-dpad { display: none; }
+    body:not(.joy) #t-joy { display: none; }
     .tbtn {
       width: 54px; height: 54px;
       border-radius: 14px; border: 2px solid rgba(0,229,255,.4);
@@ -302,6 +320,7 @@
           <div class="setting-row"><label>Sound FX</label><input type="range" id="set-sfx" min="0" max="100" /></div>
           <div class="setting-row"><label>Screen Shake</label><div class="toggle on" id="set-shake"></div></div>
           <div class="setting-row"><label>Touch Controls</label><div class="toggle" id="set-touch"></div></div>
+          <div class="setting-row"><label id="set-move-label">MOVE: JOYSTICK</label><div class="toggle on" id="set-move"></div></div>
         </div>
         <div class="hint" style="letter-spacing:.25em; margin-top:10px">POWER-UPS</div>
         <div class="panel" id="powerup-legend" style="text-align:left; max-height:38vh; overflow-y:auto; width:100%"></div>
@@ -389,6 +408,9 @@
         <div class="tbtn" id="t-left">◀</div>
         <div class="tbtn" id="t-down">▼</div>
         <div class="tbtn" id="t-right">▶</div>
+      </div>
+      <div class="tcluster" id="t-joy">
+        <div id="joy-base"><div id="joy-knob"></div></div>
       </div>
       <div class="tcluster" id="t-actions">
         <div class="tbtn" id="t-pause">II</div>

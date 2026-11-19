@@ -5,6 +5,7 @@ export interface Settings {
   sfxVol: number
   shake: boolean
   touch: 'auto' | 'on' | 'off'
+  moveStyle: 'joystick' | 'dpad'
 }
 
 export interface HighScore {
@@ -21,7 +22,7 @@ interface SaveData {
 }
 
 const DEFAULTS: SaveData = {
-  settings: { musicVol: 70, sfxVol: 80, shake: true, touch: 'auto' },
+  settings: { musicVol: 70, sfxVol: 80, shake: true, touch: 'auto', moveStyle: 'joystick' },
   scores: [],
 }
 

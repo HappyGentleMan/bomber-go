@@ -135,7 +135,7 @@ export class Game {
       dir: 0, moving: false, movingDir: null,
       speed: PLAYER_BASE_SPEED,
       bombs: 1, flame: 1,
-      shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0, kickUntil: 0,
+      shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0, kickUntil: KICK_DURATION / 1000,
       frozenUntil: 0,
       alive: true, respawnIn: 0, stepTimer: 0,
       score: 0, kills: 0,
@@ -191,7 +191,7 @@ export class Game {
     p.col = 1; p.row = 1; p.x = 1; p.y = 1
     p.moving = false; p.movingDir = null
     p.invincibleUntil = this.time + SPAWN_INVULN / 1000
-    p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
+    p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = KICK_DURATION / 1000
     p.frozenUntil = 0
     this.state = 'playing'
     this.particles.clear()
@@ -406,9 +406,11 @@ export class Game {
   private tryKickForward(p: PlayerState) {
     if (p.kickUntil <= this.time) return
     const [dc, dr] = dirVec(p.dir)
-    // tile the player is pushing into (front of the box, not rounded centre)
-    const tc = Math.round(p.x + dc * 0.35)
-    const tr = Math.round(p.y + dr * 0.35)
+    // tile being pushed into: the one directly ahead of the player's centre
+    // tile (the box stops ~0.06 short of the bomb tile, so probing from the
+    // box edge can round back to the player's own tile)
+    const tc = Math.round(p.x) + dc
+    const tr = Math.round(p.y) + dr
     const b = this.bombAt(tc, tr)
     if (!b) return
     const kc = tc + dc, kr = tr + dr
@@ -908,7 +910,7 @@ export class Game {
       p.col = s.col; p.row = s.row; p.x = s.col; p.y = s.row
       p.moving = false; p.movingDir = null; p.dir = 0
       p.invincibleUntil = this.time + SPAWN_INVULN / 1000
-      p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
+      p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = KICK_DURATION / 1000
       p.frozenUntil = 0
       p.respawnIn = 0
     }

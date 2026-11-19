@@ -48,6 +48,20 @@ export class UI {
       audio.play('menuSelect')
       this.applyTouchVisibility()
     })
+    const move = $('set-move')
+    const moveLabel = $('set-move-label')
+    const applyMove = () => {
+      move.classList.toggle('on', settings.moveStyle === 'joystick')
+      moveLabel.textContent = settings.moveStyle === 'joystick' ? 'MOVE: JOYSTICK' : 'MOVE: D-PAD'
+      document.body.classList.toggle('joy', settings.moveStyle === 'joystick')
+    }
+    move.addEventListener('click', () => {
+      settings.moveStyle = settings.moveStyle === 'joystick' ? 'dpad' : 'joystick'
+      updateSettings({ moveStyle: settings.moveStyle })
+      applyMove()
+      audio.play('menuSelect')
+    })
+    applyMove()
     this.applyTouchVisibility()
   }
 

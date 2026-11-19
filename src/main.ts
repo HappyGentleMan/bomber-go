@@ -6,7 +6,7 @@ import { audio } from './audio'
 import { net } from './net'
 import { serializeGame, RemoteGame, diffSnapshots } from './netgame'
 import { CANVAS_W, CANVAS_H, POWERUP_DEFS } from './constants'
-import { isHighScore } from './storage'
+import { isHighScore, settings } from './storage'
 import type { Dir, PowerupKind } from './constants'
 
 const stage = document.getElementById('stage')!
@@ -64,6 +64,9 @@ Object.defineProperty(window, '__net', { get: () => net, configurable: true })
 
 const dpad = document.getElementById('t-dpad')!
 const actions = document.getElementById('t-actions')!
+const joyCluster = document.getElementById('t-joy')!
+const joyBase = document.getElementById('joy-base')!
+const joyKnob = document.getElementById('joy-knob')!
 
 /** place the touch clusters in the black letterbox around the canvas
  *  (side bars in landscape, bottom bar in portrait) so they never cover the game */
@@ -71,23 +74,27 @@ function layoutTouch() {
   const sr = stage.getBoundingClientRect()
   const side = (window.innerWidth - sr.width) / 2
   const bottom = (window.innerHeight - sr.height) / 2
-  const dpadW = 178, dpadH = 116, actW = 84, actH = 138
-  if (side >= dpadW + 16) {
+  const joy = settings.moveStyle === 'joystick'
+  const moveEl = joy ? joyCluster : dpad
+  const moveW = joy ? 128 : 178
+  const moveH = joy ? 128 : 116
+  const actW = 84, actH = 138
+  if (side >= moveW + 16) {
     // landscape: black bars on the left & right (cluster fits fully)
-    dpad.style.left = `${Math.max(8, side / 2 - dpadW / 2)}px`
-    dpad.style.top = `${Math.max(8, (window.innerHeight - dpadH) / 2)}px`
-    dpad.style.right = 'auto'
-    dpad.style.bottom = 'auto'
+    moveEl.style.left = `${Math.max(8, side / 2 - moveW / 2)}px`
+    moveEl.style.top = `${Math.max(8, (window.innerHeight - moveH) / 2)}px`
+    moveEl.style.right = 'auto'
+    moveEl.style.bottom = 'auto'
     actions.style.right = `${Math.max(8, side / 2 - actW / 2)}px`
     actions.style.top = `${Math.max(8, (window.innerHeight - actH) / 2)}px`
     actions.style.left = 'auto'
     actions.style.bottom = 'auto'
   } else {
     // portrait (or narrow): black bar below the canvas
-    dpad.style.left = '14px'
-    dpad.style.bottom = `${Math.max(8, bottom / 2 - dpadH / 2)}px`
-    dpad.style.top = 'auto'
-    dpad.style.right = 'auto'
+    moveEl.style.left = '14px'
+    moveEl.style.bottom = `${Math.max(8, bottom / 2 - moveH / 2)}px`
+    moveEl.style.top = 'auto'
+    moveEl.style.right = 'auto'
     actions.style.right = '14px'
     actions.style.bottom = `${Math.max(8, bottom / 2 - actH / 2)}px`
     actions.style.top = 'auto'
@@ -387,6 +394,45 @@ bindTouch('t-right', 0)
 bindTouch('t-up', 3)
 bindTouch('t-down', 2)
 bindTouch('t-bomb', null, true)
+
+// ---------- virtual joystick (default mobile movement) ----------
+
+const JOY_TRAVEL = 44   // max knob travel from centre (px)
+const JOY_DEAD = 12     // deadzone (px) — below this, no direction
+let joyActive = false
+
+function joyUpdate(clientX: number, clientY: number) {
+  const r = joyBase.getBoundingClientRect()
+  let dx = clientX - (r.left + r.width / 2)
+  let dy = clientY - (r.top + r.height / 2)
+  const len = Math.hypot(dx, dy)
+  if (len > JOY_TRAVEL) { dx = dx / len * JOY_TRAVEL; dy = dy / len * JOY_TRAVEL }
+  joyKnob.style.transform = `translate(${dx}px, ${dy}px)`
+  const n = Math.hypot(dx, dy)
+  if (n < JOY_DEAD) input.setTouchDir(null)
+  // dominant axis -> one of the 4 game directions
+  else if (Math.abs(dx) >= Math.abs(dy)) input.setTouchDir(dx > 0 ? 0 : 1)
+  else input.setTouchDir(dy > 0 ? 2 : 3)
+}
+function joyEnd() {
+  if (!joyActive) return
+  joyActive = false
+  joyKnob.style.transform = 'translate(0px, 0px)'
+  input.setTouchDir(null)
+}
+joyBase.addEventListener('pointerdown', (e: PointerEvent) => {
+  e.preventDefault()
+  audio.ensure()
+  joyActive = true
+  try { joyBase.setPointerCapture(e.pointerId) } catch { /* synthetic pointers */ }
+  joyUpdate(e.clientX, e.clientY)
+})
+joyBase.addEventListener('pointermove', (e: PointerEvent) => {
+  if (joyActive) joyUpdate(e.clientX, e.clientY)
+})
+joyBase.addEventListener('pointerup', joyEnd)
+joyBase.addEventListener('pointercancel', joyEnd)
+
 document.getElementById('t-pause')!.addEventListener('touchstart', (e) => {
   e.preventDefault()
   if (appState === 'playing') pause()
