@@ -551,7 +551,7 @@ else if (start === 'flame') {
   dbg.bombs.push({ id: dbg.bombId++, owner: 0, col: 7, row: 6, fuse: 120, power: 4, born: 0 })
   dbg.enemies.push({
     id: 999, type: 'balloom', col: 10, row: 6, x: 10, y: 6, prevX: 10, prevY: 6,
-    dir: 1, moving: false, movingDir: null, moveTimer: 0, aiTimer: 0,
+    dir: 1, moving: false, movingDir: null, tx: 10, ty: 6, moveTimer: 0, aiTimer: 0,
     hp: 1, alive: true, frozen: true, deadAt: 0, born: 0, seed: 0.5,
   })
   // pre-advance to explosion peak, then freeze the sim (deterministic screenshots)

@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~11:30 AM · **State: HD/smooth pass in, all tests green, ready to push**
+**Last updated:** Nov 19, ~12:40 PM · **State: continuous (free-space) movement in, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -69,7 +69,38 @@ npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
 
-## HD + smoothness pass (latest, ready to commit)
+## Continuous free-space movement (this round, latest)
+
+Movement is no longer fixated on the unit grid — ported the DeepSeek
+reference's free-space model:
+
+- **Free AABB movement** — entities float as 0.6-tile boxes in open space
+  (`tryMove` + `boxHits`). While a direction is held, the perpendicular axis
+  eases back to the row/column centre (sequential snap→advance, not combined,
+  so brick corners self-resolve), so you can turn and stop *anywhere*, not
+  just on tile boundaries. `col/row` stay derived (`Math.round`) for grid
+  logic, pickup, BFS and the exit check.
+- **Bomb exit tolerance** — a bomb the entity's box already overlaps doesn't
+  block the way out (entry is still blocked). Without this, dropping a bomb
+  mid-tile spawns it under the box and the player is welded in place until
+  the flame arrives.
+- **KICK powerup** — now bump-based: pushing into a bomb slides it one tile
+  further (can chain while you keep pushing).
+- **Enemies** — slide freely toward tile-centre targets; wanderers keep their
+  loping pauses, chasers pursue without per-tile stops; new obstacles make
+  them stall + redecide from the current tile.
+- **AI fixes (found while testing free movement)** — path following now
+  replans when the derived tile changes and aims from the *actual* position
+  (the old tile-delta aimed the bot backwards mid-tile); when the bot bombs it
+  pre-plans a BFS **escape route** out of the blast (and never repaths over it
+  while inside its own blast); `blastEscape` now requires a ≤3-tile escape so
+  it never bombs itself into a trap. Battle-bot suicides vs an idle player
+  dropped from ~7/min to ~1/min (the rest are genuine dead-end traps).
+- **Bomb pulse** — the fuse animation was too fast (1.6→4.8 Hz); now a calm
+  "breathing" pulse ~0.8 Hz that gently accelerates to ~2.5 Hz as the fuse
+  runs down (4%→9% amplitude).
+
+## HD + smoothness pass (commits d361030, 5b62a45)
 
 - **Native-resolution canvas** — the canvas backing store now matches the
   displayed size × devicePixelRatio (`Renderer.resize`, wired into `fit()`), so

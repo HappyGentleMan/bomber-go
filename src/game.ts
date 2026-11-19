@@ -163,6 +163,7 @@ export class Game {
         prevX: s.col, prevY: s.row,
         dir: Math.floor(Math.random() * 4) as Dir,
         moving: false, movingDir: null,
+        tx: s.col, ty: s.row,
         moveTimer: 0, aiTimer: Math.random() * 2,
         hp: def.hp, alive: true, frozen: false, deadAt: 0,
         born: this.time,
@@ -285,6 +286,8 @@ export class Game {
       }
       if (p.frozenUntil > this.time) { p.moving = false; p.movingDir = null; this.pickupPowerups(p); continue }
       this.moveEntity(p, dt)
+      // derive the tile the player occupies (grid logic, pickup, AI, exit)
+      p.col = Math.round(p.x); p.row = Math.round(p.y)
       if (p.moving) {
         p.stepTimer -= dt
         if (p.stepTimer <= 0) {
@@ -318,64 +321,101 @@ export class Game {
     }
   }
 
-  moveEntity(e: { col: number; row: number; x: number; y: number; dir: Dir; moving: boolean; movingDir: Dir | null; speed: number }, dt: number) {
-    if (!e.moving) {
-      const d = e.movingDir
-      if (d !== null) {
-        const [dc, dr] = dirVec(d)
-        if (this.canEnter(e, e.col + dc, e.row + dr)) {
-          e.dir = d
-          e.moving = true
-          if (Math.random() < 0.5) audio.play('step')
-        }
-      }
-      return
+  // ---------------- continuous free movement (DeepSeek-style) ----------------
+  // Entities float freely: an AABB (half = 0.3 tile) in open space. While a
+  // direction is held, the axis perpendicular to it eases back to the
+  // row/column centre, so you can turn and stop anywhere — not just on
+  // tile boundaries. `col/row` stay derived (rounded) for grid logic.
+
+  private static readonly HALF = 0.3
+
+  tileSolidFor(e: { isAI?: boolean; wallpassUntil?: number; type?: string }, c: number, r: number): boolean {
+    if (c < 1 || r < 1 || c >= COLS - 1 || r >= ROWS - 1) return true
+    const t = this.tile(c, r)
+    if (t === T_HARD) return true
+    if (t === T_SOFT) {
+      if (e.isAI !== undefined) return (e.wallpassUntil ?? 0) > this.time
+      return !ENEMY_DEFS[e.type!].wallpass
     }
-    const [dc, dr] = dirVec(e.dir)
-    e.x += dc * e.speed * dt
-    e.y += dr * e.speed * dt
-    const nc = e.col + dc, nr = e.row + dr
-    const arrived = dc !== 0
-      ? (dc > 0 ? e.x >= nc : e.x <= nc)
-      : (dr > 0 ? e.y >= nr : e.y <= nr)
-    if (arrived) {
-      e.col = nc; e.row = nr
-      e.x = nc; e.y = nr
-      this.onEntityArrive(e)
-      // Seamless glide: if the direction is still held and the next tile is
-      // open, start the next tile immediately — no 1-frame stop between
-      // tiles (the stop is what made movement look choppy).
-      const d = e.movingDir
-      if (d !== null) {
-        const [dc2, dr2] = dirVec(d)
-        if (this.canEnter(e, e.col + dc2, e.row + dr2)) {
-          e.dir = d
-          e.moving = true
-          return
-        }
-      }
-      e.moving = false
-    }
+    if (this.bombAt(c, r)) return true
+    return false
   }
 
-  onEntityArrive(e: { col: number; row: number; isAI?: boolean }) {
-    if ('isAI' in e && e.isAI) {
-      const p = e as unknown as PlayerState
-      // kick bombs
-      if (p.kickUntil > this.time) {
-        const [dc, dr] = dirVec(p.dir)
-        const tc = p.col + dc, tr = p.row + dr
-        const b = this.bombAt(tc, tr)
-        if (b) {
-          const kc = tc + dc, kr = tr + dr
-          if (this.tile(kc, kr) === T_WALK && !this.bombAt(kc, kr) && !this.enemyAt(kc, kr)) {
-            b.col = kc; b.row = kr
-            audio.play('kick')
-            this.particles.text(kc * 48 + 24, kr * 48 + 12, 'KICK!', '#ffab91')
-            this.particles.dust(kc * 48 + 24, kr * 48 + 24)
-          }
-        }
+  private boxHits(x: number, y: number, e: { x: number; y: number; isAI?: boolean; wallpassUntil?: number; type?: string }): boolean {
+    const h = Game.HALF
+    const c0 = Math.floor(x - h + 0.5), c1 = Math.floor(x + h + 0.5 - 1e-4)
+    const r0 = Math.floor(y - h + 0.5), r1 = Math.floor(y + h + 0.5 - 1e-4)
+    // tiles the entity's current box already overlaps (bomb exit tolerance)
+    const pc0 = Math.floor(e.x - h + 0.5), pc1 = Math.floor(e.x + h + 0.5 - 1e-4)
+    const pr0 = Math.floor(e.y - h + 0.5), pr1 = Math.floor(e.y + h + 0.5 - 1e-4)
+    for (let r = r0; r <= r1; r++)
+      for (let c = c0; c <= c1; c++) {
+        if (!this.tileSolidFor(e, c, r)) continue
+        // a bomb the entity is already standing in doesn't block the way out
+        // (entry is still blocked; this only lets a mid-tile bomb drop phase out)
+        if (this.bombAt(c, r) && c >= pc0 && c <= pc1 && r >= pr0 && r <= pr1) continue
+        return true
       }
+    return false
+  }
+
+  /** Attempt a free-space move; returns false (no move) if blocked. */
+  tryMove(ent: { x: number; y: number; isAI?: boolean }, dx: number, dy: number): boolean {
+    if (dx === 0 && dy === 0) return false
+    const nx = ent.x + dx, ny = ent.y + dy
+    if (this.boxHits(nx, ny, ent)) return false
+    if (ent.isAI !== undefined) {
+      // players block each other (AABB overlap)
+      for (const other of this.players) {
+        if (other === ent || !other.alive) continue
+        if (Math.abs(nx - other.x) < 0.55 && Math.abs(ny - other.y) < 0.55) return false
+      }
+    }
+    ent.x = nx; ent.y = ny
+    return true
+  }
+
+  moveEntity(e: { x: number; y: number; dir: Dir; moving: boolean; movingDir: Dir | null; speed: number; isAI?: boolean }, dt: number) {
+    const d = e.movingDir
+    if (d === null) { e.moving = false; return }
+    e.dir = d
+    const [vx, vy] = dirVec(d)
+    const step = e.speed * dt
+    const p = e.isAI !== undefined ? (e as PlayerState) : null
+    let blocked = true
+    if (vx !== 0) {
+      // ease y back to the row centre first, then slide along it.
+      // Sequential (not combined): a pure snap self-resolves around brick
+      // corners that a diagonal move would wedge against.
+      let s = Math.round(e.y) - e.y
+      if (Math.abs(s) > step) s = Math.sign(s) * step
+      if (Math.abs(s) > 0.001) this.tryMove(e, 0, s)
+      blocked = !this.tryMove(e, vx * step, 0)
+    } else {
+      let s = Math.round(e.x) - e.x
+      if (Math.abs(s) > step) s = Math.sign(s) * step
+      if (Math.abs(s) > 0.001) this.tryMove(e, s, 0)
+      blocked = !this.tryMove(e, 0, vy * step)
+    }
+    if (blocked && p) this.tryKickForward(p)
+    e.moving = !blocked
+  }
+
+  /** KICK powerup: bumping into a bomb sends it sliding one tile further. */
+  private tryKickForward(p: PlayerState) {
+    if (p.kickUntil <= this.time) return
+    const [dc, dr] = dirVec(p.dir)
+    // tile the player is pushing into (front of the box, not rounded centre)
+    const tc = Math.round(p.x + dc * 0.35)
+    const tr = Math.round(p.y + dr * 0.35)
+    const b = this.bombAt(tc, tr)
+    if (!b) return
+    const kc = tc + dc, kr = tr + dr
+    if (this.tile(kc, kr) === T_WALK && !this.bombAt(kc, kr) && !this.enemyAt(kc, kr)) {
+      b.col = kc; b.row = kr
+      audio.play('kick')
+      this.particles.text(kc * 48 + 24, kr * 48 + 12, 'KICK!', '#ffab91')
+      this.particles.dust(kc * 48 + 24, kr * 48 + 24)
     }
   }
 
@@ -497,6 +537,8 @@ export class Game {
       // decide direction on tile arrival (moveTimer used as decision cadence)
       const speed = def.speed * ENEMY_SPEED_SCALE * speedMul * (e.frozen ? 0 : 1)
       this.moveEnemy(e, dt, speed, def, target)
+      // derive the tile the enemy occupies (flame check, AI, rendering)
+      e.col = Math.round(e.x); e.row = Math.round(e.y)
     }
     // flame deaths
     const flame = this.flameSet()
@@ -508,46 +550,49 @@ export class Game {
   }
 
   moveEnemy(e: EnemyState, dt: number, speed: number, def: EnemyDef, target: PlayerState | undefined) {
+    // not moving: (re)choose a target tile (wanderers pause between tiles)
     if (!e.moving) {
       if (e.aiTimer <= 0) {
         e.dir = this.enemyDecide(e, def, target)
-        e.aiTimer = def.ai === 'wander' ? 1.2 + e.seed * 1.5 : 0
-      }
-      const [dc, dr] = dirVec(e.dir)
-      if (this.canEnter(e, e.col + dc, e.row + dr)) {
-        e.moving = true
-        e.movingDir = null
-      } else {
-        e.aiTimer = 0 // blocked: redecide immediately next frame
-        e.dir = this.enemyDecide(e, def, target)
-        const [dc2, dr2] = dirVec(e.dir)
-        if (this.canEnter(e, e.col + dc2, e.row + dr2)) { e.moving = true; e.movingDir = null }
+        const [dc, dr] = dirVec(e.dir)
+        if (this.canEnter(e, e.col + dc, e.row + dr)) {
+          e.tx = e.col + dc; e.ty = e.row + dr
+          e.moving = true
+        } else {
+          e.aiTimer = 0.15 // blocked: redecide shortly
+        }
       }
       return
     }
-    e.x += dirVec(e.dir)[0] * speed * dt
-    e.y += dirVec(e.dir)[1] * speed * dt
-    const [dc, dr] = dirVec(e.dir)
-    const nc = e.col + dc, nr = e.row + dr
-    const arrived = dc !== 0 ? (dc > 0 ? e.x >= nc : e.x <= nc) : (dr > 0 ? e.y >= nr : e.y <= nr)
-    if (arrived) {
-      e.col = nc; e.row = nr; e.x = nc; e.y = nr
+    // slide toward the target tile centre (free space, collision-checked)
+    const step = speed * dt
+    const ddx = e.tx - e.x, ddy = e.ty - e.y
+    const adx = Math.abs(ddx), ady = Math.abs(ddy)
+    const dx = adx >= ady ? Math.sign(ddx) * Math.min(adx, step) : 0
+    const dy = ady > adx ? Math.sign(ddy) * Math.min(ady, step) : 0
+    if (!this.tryMove(e, dx, dy) && adx + ady > 1e-4) {
+      // something new is in the way — stall and redecide from current tile
+      e.moving = false
+      e.aiTimer = 0
+      return
+    }
+    if (Math.abs(e.tx - e.x) < 0.02 && Math.abs(e.ty - e.y) < 0.02) {
+      e.x = e.tx; e.y = e.ty
       if (def.ai === 'wander') {
         // wanderers pause between tiles (deliberate loping gait)
-        e.aiTimer = 0.8 + e.seed * 1.8
         e.moving = false
+        e.aiTimer = 0.8 + e.seed * 1.8
         return
       }
-      // chasers: re-decide and continue immediately — no 1-frame stop per
-      // tile (keeps pursuit smooth instead of choppy)
+      // chasers: pick the next tile and continue — no per-tile stop
       e.dir = this.enemyDecide(e, def, target)
-      let [dc2, dr2] = dirVec(e.dir)
-      if (!this.canEnter(e, e.col + dc2, e.row + dr2)) {
-        e.dir = this.enemyDecide(e, def, target)
-        ;[dc2, dr2] = dirVec(e.dir)
+      const [dc, dr] = dirVec(e.dir)
+      if (this.canEnter(e, e.col + dc, e.row + dr)) {
+        e.tx = e.col + dc; e.ty = e.row + dr
+      } else {
+        e.moving = false
+        e.aiTimer = 0
       }
-      e.moving = this.canEnter(e, e.col + dc2, e.row + dr2)
-      e.movingDir = null
     }
   }
 
@@ -1013,7 +1058,7 @@ export class Game {
 
   // ---------------- AI (battle bot + attract) ----------------
 
-  private aiState = new Map<number, { path: { x: number; y: number }[]; repath: number }>()
+  private aiState = new Map<number, { path: { x: number; y: number }[]; repath: number; sx: number; sy: number }>()
 
   aiThink(p: PlayerState): { dir: Dir | null; bomb: boolean; detonate: boolean } {
     const out = { dir: null as Dir | null, bomb: false, detonate: false }
@@ -1074,16 +1119,21 @@ export class Game {
       }
     }
 
-    // 2. immediate danger override
+    // 2. immediate danger override (may also plant an escape route in aiState)
     const threat = this.threatDir(p, out.bomb)
     if (threat !== null) {
-      this.aiState.delete(p.id)
       return { ...out, dir: threat }
     }
 
-    // 3. path following (replan periodically)
+    // 3. path following (replan periodically — and whenever the player's
+    // derived tile changes, so the path is always anchored ahead of the
+    // free-moving position)
     let st = this.aiState.get(p.id)
-    if (!st || this.time > st.repath) {
+    // while inside our own bomb's blast, keep the escape route (a repath to
+    // the pursuit target would lead straight back into the flame)
+    const inOwnBlast = this.bombs.some(b => b.owner === p.id
+      && this.blastSet(b.col, b.row, b.power).has(key(p.col, p.row)))
+    if (!st || this.time > st.repath || ((st.sx !== p.col || st.sy !== p.row) && !inOwnBlast)) {
       let target: { c: number; r: number }
       if (enemy) {
         // battle: hunt the opponent
@@ -1138,13 +1188,26 @@ export class Game {
         if (nearest && nearestD <= 4) target = { c: nearest.col, r: nearest.row }
       }
       const path = this.bfs(p.col, p.row, target.c, target.r, true) ?? []
-      st = { path, repath: this.time + 0.5 }
+      st = { path, repath: this.time + 0.5, sx: p.col, sy: p.row }
       this.aiState.set(p.id, st)
     }
+    // path starts at the player's own tile — skip it; also skip any waypoint
+    // the player has already passed (free movement straddles tile centres)
     while (st.path.length && st.path[0].x === p.col && st.path[0].y === p.row) st.path.shift()
+    while (st.path.length) {
+      const h = st.path[0], n = st.path[1]
+      const dh = (h.x - p.x) ** 2 + (h.y - p.y) ** 2
+      if (dh < 0.12) { st.path.shift(); continue } // arrived
+      if (n) {
+        const dn = (n.x - p.x) ** 2 + (n.y - p.y) ** 2
+        if (dn < dh) { st.path.shift(); continue } // head is behind us
+      }
+      break
+    }
     if (st.path.length) {
-      const dc = st.path[0].x - p.col, dr = st.path[0].y - p.row
-      const nd = (dc === 1 ? 0 : dc === -1 ? 1 : dr === 1 ? 2 : 3) as Dir
+      // face the waypoint from the actual (free) position, dominant axis first
+      const dx = st.path[0].x - p.x, dy = st.path[0].y - p.y
+      const nd = (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 1) : (dy > 0 ? 2 : 3)) as Dir
       const [mc, mr] = dirVec(nd)
       const nc = p.col + mc, nrr = p.row + mr
       // brick on the path: bomb it (own-tile bomb burns adjacent bricks)
@@ -1158,7 +1221,58 @@ export class Game {
       out.dir = Math.floor(Math.random() * 4) as Dir
       st.repath = Math.max(st.repath, this.time + 0.3)
     }
+    // if we're about to bomb, pre-plan the way out of the blast so the
+    // pursuit path can't lead us back into our own flame
+    if (out.bomb) {
+      const route = this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
+      if (route) this.aiState.set(p.id, { path: route, repath: this.time + 0.5, sx: p.col, sy: p.row })
+    }
     return out
+  }
+
+  /** tiles covered if a bomb of power `pow` detonates at (c, r) */
+  private blastSet(c: number, r: number, pow: number): Set<number> {
+    const s = new Set<number>([key(c, r)])
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let i = 1; i <= pow; i++) {
+        const cc = c + dc * i, rr = r + dr * i
+        const t = this.tile(cc, rr)
+        if (t === T_HARD) break
+        if (t === T_SOFT) { s.add(key(cc, rr)); break }
+        s.add(key(cc, rr))
+      }
+    }
+    return s
+  }
+
+  /** shortest route (tile list, start excluded) from p's tile to a tile
+   *  outside `blast`; null if p is already clear or no route exists */
+  private escapeRoute(p: PlayerState, blast: Set<number>): { x: number; y: number }[] | null {
+    const startK = key(p.col, p.row)
+    if (!blast.has(startK)) return null
+    const q: number[] = [startK]
+    const came = new Map<number, number>()
+    const seen = new Set<number>([startK])
+    let safeK = -1
+    while (q.length && safeK < 0) {
+      const k = q.shift()!
+      if (!blast.has(k)) { safeK = k; break }
+      const c = k % COLS, r = Math.floor(k / COLS)
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr
+        const nk = key(nc, nr)
+        if (seen.has(nk) || !this.canEnter(p, nc, nr)) continue
+        seen.add(nk); came.set(nk, k); q.push(nk)
+      }
+    }
+    if (safeK < 0) return null
+    const route: { x: number; y: number }[] = []
+    let k = safeK
+    while (k !== startK) {
+      route.unshift({ x: k % COLS, y: Math.floor(k / COLS) })
+      k = came.get(k)!
+    }
+    return route
   }
 
   private threatDir(p: PlayerState, justBombed: boolean): Dir | null {
@@ -1204,25 +1318,24 @@ export class Game {
           if (score > bestScore) { bestScore = score; best = q }
         }
         if (!best) for (const q of [2, 3, 0, 1] as Dir[]) if (safe(q)) { best = q; break }
-        if (best) return best
+        if (best) { this.aiState.delete(p.id); return best }
       }
     }
-    // on fire / about to be on fire: get out. Blast tiles may be crossed on
-    // the way out (they're only fatal at detonation) — score destinations by
-    // how far outside the blast and how open they are
+    // on fire / about to be on fire: plan the shortest route to a tile
+    // outside the blast and follow it — a greedy one-tile flee can loop
+    // inside the blast (every neighbour also ablaze) and burn with it
     if (soon.has(key(p.col, p.row)) || soon.has(key(p.col + dc, p.row + dr))) {
-      let best: Dir | null = null, bestScore = -Infinity
-      for (const q of [2, 3, 0, 1] as Dir[]) {
-        const [c2, r2] = dirVec(q)
-        const nc = p.col + c2, nr = p.row + r2
-        if (!this.canEnter(p, nc, nr)) continue
-        let s = 0
-        if (!soon.has(key(nc, nr))) s += 4
-        if (nc === p.col + dc && nr === p.row + dr) s += 2
-        s += this.openNeighbors(nc, nr) * 0.5
-        if (s > bestScore) { bestScore = s; best = q }
+      const route = this.escapeRoute(p, soon)
+      if (route) {
+        this.aiState.set(p.id, { path: route, repath: this.time + 0.5, sx: p.col, sy: p.row })
+        const h = route[0]
+        const dx = h.x - p.x, dy = h.y - p.y
+        return (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 1) : (dy > 0 ? 2 : 3)) as Dir
       }
-      if (best) return best
+      // only the forward tile is threatened: back off
+      const back = ((p.dir + 2) % 4) as Dir
+      const [bc, br] = dirVec(back)
+      if (this.canEnter(p, p.col + bc, p.row + br) && !soon.has(key(p.col + bc, p.row + br))) return back
     }
     return null
   }
@@ -1256,41 +1369,12 @@ export class Game {
     return n
   }
 
-  /** true if, after placing a bomb on p's tile, p can walk to a tile outside
-   *  the blast before the fuse runs out (blast tiles may be crossed early —
-   *  they're only fatal at detonation) */
+  /** true if, after placing a bomb on p's tile, p can physically get out:
+   *  a route to a tile outside the blast of at most 3 tiles (the AI follows
+   *  the escape route immediately — longer routes lose the race to the fuse
+   *  when the pursuit path pulls back into the blast) */
   private blastEscape(p: PlayerState): boolean {
-    const c = p.col, r = p.row, pow = p.flame
-    const blast = new Set<number>([key(c, r)])
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      for (let i = 1; i <= pow; i++) {
-        const cc = c + dc * i, rr = r + dr * i
-        const t = this.tile(cc, rr)
-        if (t === T_HARD) break
-        if (t === T_SOFT) { blast.add(key(cc, rr)); break }
-        blast.add(key(cc, rr))
-      }
-    }
-    // blast tiles are only fatal at detonation, so p may pass through them
-    // early — we just need to reach a tile outside the blast before the fuse
-    const maxSteps = Math.max(2, Math.floor((BOMB_FUSE / 1000) * p.speed * 0.7))
-    const seen = new Set<number>([key(c, r)])
-    let frontier: [number, number][] = [[c, r]]
-    for (let d = 0; d < maxSteps && frontier.length; d++) {
-      const next: [number, number][] = []
-      for (const [fc, fr] of frontier) {
-        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const cc = fc + dc, rr = fr + dr
-          const k = key(cc, rr)
-          if (seen.has(k)) continue
-          if (this.tile(cc, rr) !== T_WALK) continue
-          seen.add(k)
-          if (!blast.has(k)) return true
-          next.push([cc, rr])
-        }
-      }
-      frontier = next
-    }
-    return false
+    const route = this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
+    return route !== null && route.length <= 3
   }
 }

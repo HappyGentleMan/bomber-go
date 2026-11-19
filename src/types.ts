@@ -77,6 +77,7 @@ export interface EnemyState {
   dir: Dir
   moving: boolean
   movingDir: Dir | null
+  tx: number; ty: number   // target tile centre (free movement)
   moveTimer: number
   aiTimer: number
   hp: number

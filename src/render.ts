@@ -406,7 +406,10 @@ export class Renderer {
   private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number) {
     const x = b.col * TILE + TILE / 2
     const y = b.row * TILE + TILE / 2
-    const pulse = 1 + 0.08 * Math.sin(t * (10 + (1 - b.fuse / 2600) * 20))
+    // natural fuse pulse: slow calm breathing (~0.8 Hz) that gently
+    // speeds up as the fuse burns down (~2.5 Hz at the end)
+    const f = Math.max(0, Math.min(1, b.fuse / 2000))
+    const pulse = 1 + (0.04 + (1 - f) * 0.05) * Math.sin(t * (5 + (1 - f) * 10))
     ctx.save()
     ctx.translate(x, y)
     ctx.scale(pulse, pulse)
