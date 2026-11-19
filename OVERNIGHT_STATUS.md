@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~6:25 AM · **State: complete, all tests green, ready to push**
+**Last updated:** Nov 19, ~9:40 AM · **State: online mode + hidden items in, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,35 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Online battle + hidden items (this round, commit 124425e)
+
+- **Online 1v1 (PeerJS)** — host-authoritative netcode: the client sends only
+  `{dir, bomb, detonate}` inputs; the host runs the real simulation and streams
+  ~20 Hz state snapshots. Client renders a `RemoteGame` (no local sim) and plays
+  audio/haptics from snapshot diffs. 5-letter room codes, `bomberggo-` peer
+  prefix, graceful disconnect UX. New files: `src/net.ts`, `src/netgame.ts`.
+- **Renderable interface** — `Renderer`/HUD now draw any `Renderable` (the real
+  `Game` *or* a `RemoteGame`), so local and online play share one render path.
+- **Hidden powerups in destructible walls** — level items load *unrevealed*;
+  breaking a brick reveals the item inside (sparkle + "ITEM!" popup). Level-gen
+  rules: items only on brick cells, never in spawn corners, connectivity carving
+  never opens an item/exit brick, post-pass re-hides anything a path exposed.
+  Runtime drops (kills, battle spawns) stay revealed.
+- **Mobile touch in the letterbox** — the on-screen dpad + action buttons live in
+  the black bars around the canvas, never over the play area. Landscape: side
+  bars; portrait: bottom bar. Placement only where the cluster fully fits.
+- **`__net` debug handle** — `window.__net` exposes the live net layer for
+  inspection.
+
+### Online: verified up to the ICE boundary
+The full signaling chain works in the in-app browser (offer → answer → data
+channel `connecting`). The final ICE leg can't complete *in this embedded
+Chromium*: it gathers **zero** ICE candidates (no host/SRFLX/relay), which is a
+browser-level restriction, not a code bug. A real browser (Chrome/Safari/Firefox
+or any phone) gathers host candidates and will connect. **To test end-to-end:
+open two windows of the game in a real browser, Create a room in one, Join with
+the code in the other.**
 
 ## One thing left for you: push to GitHub
 
