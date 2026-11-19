@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~7:40 PM · **State: classic Bomb Kick slide in (7e1e7d9), all tests green, ready to push**
+**Last updated:** Nov 19, ~8:30 PM · **State: permanent KICK + bombs stop at enemies (992cfdd), all tests green, ready to push**
 
 ## What got done overnight
 
@@ -69,15 +69,31 @@ npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
 
+## Permanent KICK + bombs stop at enemies (this round, commit 992cfdd)
+
+Player feedback: the timed KICK felt like it "ran out", and the bomb
+ploughing through enemies was too OP.
+
+- **KICK is now a permanent ability** — every player can kick at any
+  time (like movement / bomb placement). The 8s `kickUntil` timer is
+  gone (player state + online snapshots), and the KICK powerup no
+  longer drops or appears in the settings legend.
+- **Sliding bombs stop in front of enemies** (same as walls, bricks,
+  other bombs, players) — no more squash-kill on contact.
+- Smoke suite's "AI kills happen" battle check hardened to two
+  independent 150s runs (a single run can legitimately score 0 kills
+  with an unlucky seed — this caused one flaky failure).
+
 ## Classic Bomb Kick slide (this round, commit 7e1e7d9)
 
 The kick is now the real Bomb Kick (Bomberman '93+): one kick sends the
-bomb **sliding across the stage until it hits a wall, brick, bomb or
-player** (11 tiles/s, per-tile collision, stops flush against the
-obstacle). It ploughs through enemies on the way (kill credited to the
-bomb's owner, Super Bomberman style). Mid-slide detonation happens at
-the bomb's current tile. Online clients get id + x/y + sliding in
-snapshots and lerp the bomb like players.
+bomb **sliding across the stage until it hits a wall, brick, bomb,
+enemy or player** (11 tiles/s, per-tile collision, stops flush against
+the obstacle). Mid-slide detonation happens at the bomb's current tile.
+Online clients get id + x/y + sliding in snapshots and lerp the bomb
+like players. (An early version ploughed through enemies on the way —
+removed in 992cfdd as too OP; a sliding bomb now stops in front of
+them.)
 
 ## Joystick + KICK-at-start (this round, commit 7d3a242)
 
@@ -86,8 +102,9 @@ snapshots and lerp the bomb like players.
   springs back on release). New `MOVE: JOYSTICK / D-PAD` toggle in
   settings (persisted); d-pad still available. Sits in the same
   letterbox slot the d-pad used.
-- **KICK at start** — every player starts each game/level/round with the
-  8s KICK ability, so bomb-pushing works from the first second.
+- **KICK** — now a permanent ability (superseded the original "8s KICK
+  at start" idea in 992cfdd): every player can kick at any time, so
+  bomb-pushing works from the first second and never runs out.
 - **Kick probe fix** — the box stops ~0.06 tile short of the bomb tile, so
   the old "front of the box" probe rounded back to the player's own tile
   and kicks never fired; it now probes the tile directly ahead of the
