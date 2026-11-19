@@ -110,6 +110,8 @@ export class Renderer {
   }
 
   draw(game: Renderable, t: number, alpha = 1) {
+    // the online client renders before the first snapshot arrives (empty grid)
+    if (!game.grid || game.grid.length === 0) return
     const ctx = this.ctx
     ctx.save()
     const sh = game.getShakeOffset()

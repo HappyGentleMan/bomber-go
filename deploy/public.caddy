@@ -1,0 +1,41 @@
+# BOMBER GO — public entry (imported by ~/.hermes/etc-from-vps/caddy/Caddyfile.public)
+#
+# Public URL: https://bomber.119-247-94-77.sslip.io
+#   sslip.io resolves *.119-247-94-77.sslip.io → 119.247.94.77 (Anson's public IP),
+#   and the router forwards 80/443 → 192.168.0.241, where the public Caddy runs.
+#   Caddy issues the Let's Encrypt cert on first request (HTTP-01).
+#
+# Serves the same deploy/current symlink as the loopback site, so the auto-deploy
+# watcher updates this URL too — no reload needed after a build.
+
+https://bomber.119-247-94-77.sslip.io {
+	bind 192.168.0.241
+
+	root * "/Users/anson/srv/bomber-go/current"
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	header -Server
+	header -Strict-Transport-Security
+	header X-Content-Type-Options "nosniff"
+
+	# hashed bundle assets — immutable
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# entry document + service worker + build stamp — always revalidate
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+	@sw path /sw.js
+	header @sw Cache-Control "no-cache"
+	@ver path /version.json
+	header @ver Cache-Control "no-cache"
+
+	try_files {path} {path}/ /index.html
+	file_server
+}

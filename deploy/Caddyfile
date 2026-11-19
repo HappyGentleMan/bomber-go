@@ -1,0 +1,63 @@
+# BOMBER GO — static host for the built game.
+#
+# Served on loopback only (127.0.0.1:8414). Public entry is Tailscale Funnel:
+#   https://ansons-mac-studio.tail2102a2.ts.net:8443/bomber/
+#   (tailscale funnel --https=8443 --set-path=/bomber http://127.0.0.1:8414)
+#
+# deploy/current is a symlink to the newest deploy/releases/<stamp>/ directory.
+# The watcher (deploy/watch.mjs) swaps it atomically after every successful
+# build, so new versions go live without restarting Caddy or this host.
+#
+# Cache rules matter here:
+#   - index.html + sw.js + version.json must revalidate, otherwise friends keep
+#     seeing an old build (the PWA service worker caches aggressively).
+#   - /assets/* are content-hashed by Vite, so they can be cached forever.
+{
+	admin off
+	auto_https off
+}
+
+http://:8414 {
+	bind 127.0.0.1
+
+	root * "/Users/anson/srv/bomber-go/current"
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	header -Server
+
+	# hashed bundle assets — immutable
+	@hashed path_regexp ^(/bomber)?/assets/
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# entry document — always revalidate so a new deploy is picked up on reload
+	@html path_regexp ^(/bomber)?/(index\.html)?$
+	header @html Cache-Control "no-cache"
+
+	# service worker + build stamp — always revalidate
+	@sw path_regexp ^(/bomber)?/sw\.js$
+	header @sw Cache-Control "no-cache"
+	@ver path_regexp ^(/bomber)?/version\.json$
+	header @ver Cache-Control "no-cache"
+
+	# keep relative asset URLs working under the /bomber/ prefix
+	@noslash path /bomber
+	redir @noslash /bomber/ 308
+
+	# Funnel forwards the /bomber prefix as-is; strip it before serving files.
+	handle_path /bomber* {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	# Fallback: if the prefix was already stripped upstream, serve at the root.
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+}

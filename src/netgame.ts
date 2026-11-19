@@ -128,7 +128,7 @@ export class RemoteGame {
         bombs: p[5], flame: p[6],
         shieldUntil: p[8], invincibleUntil: p[9],
         wallpassUntil: p[10], frozenUntil: p[11],
-        kills: p[13], respawnIn: p[14],
+        kills: p[12], respawnIn: p[13],
         movingDir: null, stepTimer: 0,
         color: i === 0 ? '#00e5ff' : '#ff2e88',
       }
