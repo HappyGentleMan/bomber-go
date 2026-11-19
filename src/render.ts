@@ -406,10 +406,10 @@ export class Renderer {
   private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number) {
     const x = b.col * TILE + TILE / 2
     const y = b.row * TILE + TILE / 2
-    // natural fuse pulse: slow calm breathing (~0.8 Hz) that gently
-    // speeds up as the fuse burns down (~2.5 Hz at the end)
+    // natural fuse pulse: slow calm breathing (~0.5 Hz) that gently
+    // speeds up as the fuse burns down (~1.2 Hz at the end)
     const f = Math.max(0, Math.min(1, b.fuse / 2000))
-    const pulse = 1 + (0.04 + (1 - f) * 0.05) * Math.sin(t * (5 + (1 - f) * 10))
+    const pulse = 1 + (0.03 + (1 - f) * 0.04) * Math.sin(t * (3 + (1 - f) * 4.5))
     ctx.save()
     ctx.translate(x, y)
     ctx.scale(pulse, pulse)
@@ -424,14 +424,13 @@ export class Renderer {
     else ctx.strokeStyle = 'rgba(255,80,80,0.9)'
     ctx.lineWidth = 2
     ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.stroke()
-    // fuse spark
-    const spark = Math.random()
-    if (spark > 0.5) {
-      ctx.fillStyle = spark > 0.85 ? '#ffd54a' : '#ff9800'
-      ctx.beginPath()
-      ctx.arc(2 + (Math.random() - 0.5) * 6, -14 - Math.random() * 4, 1.5 + Math.random() * 1.5, 0, Math.PI * 2)
-      ctx.fill()
-    }
+    // fuse spark: a steady ember with a gentle smooth twinkle (per-bomb
+    // phase offset so bombs don't pulse in sync) — no hard on/off flicker
+    const tw = 0.5 + 0.5 * Math.sin(t * 9 + b.col * 1.7 + b.row * 2.3)
+    ctx.fillStyle = `rgba(255, ${Math.round(150 + tw * 90)}, 40, ${0.55 + tw * 0.45})`
+    ctx.beginPath()
+    ctx.arc(2, -14 - tw * 3, 1.2 + tw * 1.6, 0, Math.PI * 2)
+    ctx.fill()
     ctx.restore()
   }
 

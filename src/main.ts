@@ -96,7 +96,7 @@ function layoutTouch() {
 }
 
 function fit() {
-  const pad = 16
+  const pad = 8
   const availW = window.innerWidth - pad
   const availH = window.innerHeight - pad
   const scale = Math.min(availW / CANVAS_W, availH / CANVAS_H)

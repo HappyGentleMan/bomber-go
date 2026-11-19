@@ -123,6 +123,7 @@
       border-radius: 6px; padding: 3px 8px; font-weight: 700; font-size: 13px; color: #bcd2ff;
     }
     .hint { font-size: 12px; opacity: .65; letter-spacing: .06em; }
+    .rotate-hint { display: none; color: var(--gold); opacity: .9; font-weight: 700; font-size: 13px; letter-spacing: .15em; }
     .score-table { font-variant-numeric: tabular-nums; }
     .score-table div { display: flex; justify-content: space-between; gap: 30px; padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,.08); }
     input.initials {
@@ -230,15 +231,27 @@
       background: #0d1426; color: var(--neon); border: 2px solid rgba(0,229,255,.4); border-radius: 8px; padding: 8px;
     }
     input.code-input:focus { outline: none; border-color: var(--neon); box-shadow: 0 0 16px rgba(0,229,255,.3); }
-    /* portrait phones: compact overlays so menus fit */
+    /* portrait phones: menus use the FULL screen (the canvas is a short
+       strip in portrait, so menus must not be trapped in it or they scroll) */
     @media (orientation: portrait) and (max-width: 520px) {
-      .overlay { gap: 10px; padding: 12px; overflow-y: auto; }
-      .logo { font-size: clamp(24px, 8.5vw, 38px); }
+      .overlay { position: fixed; inset: 0; gap: 12px; padding: 16px; }
+      .logo { font-size: clamp(26px, 9vw, 40px); }
       .logo small { margin-top: 4px; letter-spacing: .4em; }
-      .btn { min-width: 210px; padding: 10px 22px; font-size: 15px; }
-      .menu { gap: 8px; }
+      .btn { min-width: 220px; padding: 11px 22px; font-size: 15px; }
+      .menu { gap: 9px; }
+      #ui-title #title-ai { display: none; }
       #ui-title > .hint:last-of-type { display: none; }
       .panel { padding: 12px 18px; }
+      .rotate-hint { display: block; }
+    }
+    /* short landscape screens (phones in landscape): compact menus */
+    @media (orientation: landscape) and (max-height: 520px) {
+      .overlay { gap: 10px; padding: 12px; }
+      .logo { font-size: clamp(22px, 7vh, 34px); }
+      .btn { min-width: 190px; padding: 9px 20px; font-size: 14px; }
+      .menu { gap: 8px; }
+      #ui-title #title-ai { display: none; }
+      #ui-title > .hint:last-of-type { display: none; }
     }
   </style>
 </head>
@@ -259,7 +272,8 @@
       <div id="ui-title" class="overlay">
         <div class="logo">BOMBER GO<small>BLAST · POWER · SURVIVE</small></div>
         <div class="hint" id="title-top" style="letter-spacing:.15em"></div>
-        <div class="hint" style="font-size:10px; opacity:.4; letter-spacing:.2em">AI VS AI IN THE BACKGROUND</div>
+        <div class="hint" id="title-ai" style="font-size:10px; opacity:.4; letter-spacing:.2em">AI VS AI IN THE BACKGROUND</div>
+        <div class="rotate-hint">⟳ ROTATE FOR A BIGGER GAME</div>
         <div class="menu" id="menu-main">          <button class="btn primary sel" data-action="campaign">CAREER</button>
           <button class="btn" data-action="battle">BATTLE</button>
           <button class="btn" data-action="online">ONLINE</button>
