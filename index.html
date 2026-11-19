@@ -29,8 +29,9 @@
     #app { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
     #stage {
       position: relative;
-      box-shadow: 0 0 60px rgba(0,229,255,.15), 0 20px 60px rgba(0,0,0,.6);
-      border-radius: 12px;
+      box-shadow: 0 0 80px rgba(0,229,255,.18), 0 0 24px rgba(0,229,255,.10), 0 24px 70px rgba(0,0,0,.65);
+      border: 1px solid rgba(0,229,255,.22);
+      border-radius: 14px;
       overflow: hidden;
     }
     #game { display: block; image-rendering: pixelated; }
@@ -38,8 +39,9 @@
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 18px;
-      background: rgba(8, 12, 24, .78);
-      backdrop-filter: blur(6px);
+      background: radial-gradient(ellipse 90% 70% at 50% 42%, rgba(10,16,32,.66) 0%, rgba(6,9,18,.88) 100%);
+      -webkit-backdrop-filter: blur(7px);
+      backdrop-filter: blur(7px);
       z-index: 10;
       padding: 20px;
     }
@@ -101,22 +103,40 @@
     .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #5c6f9c; transition: all .15s; }
     .toggle.on { background: rgba(0,229,255,.25); border-color: var(--neon); }
     .toggle.on::after { left: 27px; background: var(--neon); }
-    /* HUD */
+    /* HUD — modern glass chips */
     #hud {
       position: absolute; top: 0; left: 0; right: 0; z-index: 5;
       display: flex; justify-content: space-between; align-items: center;
-      padding: 8px 14px;
-      background: linear-gradient(180deg, rgba(6,10,20,.85), rgba(6,10,20,0));
+      gap: 8px;
+      padding: 10px 12px;
       pointer-events: none;
       font-variant-numeric: tabular-nums;
     }
-    #hud .stat { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .05em; font-size: clamp(11px, 1.8vw, 15px); }
+    #hud .stat {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 700; letter-spacing: .05em;
+      font-size: clamp(11px, 1.8vw, 15px);
+      background: rgba(10, 16, 32, .58);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 229, 255, .16);
+      border-radius: 12px;
+      padding: 6px 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+    }
     #hud .stat .val { color: var(--gold); }
     #hud .pips { display: flex; gap: 3px; }
     #hud .pip { width: 8px; height: 8px; border-radius: 2px; background: #2a3a5f; }
     #hud .pip.on { background: var(--neon); box-shadow: 0 0 6px var(--neon); }
-    #hud .timer { font-size: clamp(16px, 2.6vw, 22px); font-weight: 900; }
-    #hud .timer.danger { color: #ff5252; animation: pulse 1s infinite; }
+    #hud .timer {
+      font-size: clamp(15px, 2.4vw, 21px); font-weight: 900;
+      min-width: 64px; justify-content: center;
+      border-color: rgba(255,255,255,.14);
+    }
+    #hud .timer.danger {
+      color: #ff5252; border-color: rgba(255,82,82,.5);
+      box-shadow: 0 0 18px rgba(255,82,82,.35), inset 0 0 10px rgba(255,82,82,.15);
+      animation: pulse 1s infinite;
+    }
     @keyframes pulse { 50% { opacity: .4; } }
     @keyframes logopulse {
       0%, 100% { filter: drop-shadow(0 0 18px rgba(0,229,255,.45)); }
@@ -141,9 +161,10 @@
       z-index: 8; pointer-events: none;
       font-size: clamp(28px, 5vw, 52px); font-weight: 900; letter-spacing: .2em;
       color: #fff; text-shadow: 0 0 24px var(--neon), 0 4px 12px rgba(0,0,0,.8);
-      opacity: 0; transition: opacity .25s;
+      opacity: 0; transform: scale(.92);
+      transition: opacity .22s ease, transform .3s cubic-bezier(.2,1.4,.4,1);
     }
-    #banner.show { opacity: 1; }
+    #banner.show { opacity: 1; transform: scale(1); }
     /* touch controls */
     #touch { position: absolute; inset: 0; z-index: 6; pointer-events: none; display: none; }
     body.touch #touch { display: block; }

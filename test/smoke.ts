@@ -35,6 +35,35 @@ for (let lvl = 1; lvl <= 12; lvl++) {
     `enemies=${g.enemies.length} exit=(${g.exit.col},${g.exit.row})`)
 }
 
+console.log('— Spawn area clear (no bricks boxing in the player) —')
+{
+  let bad = 0
+  for (let i = 0; i < 25; i++) {
+    const g = new Game('campaign')
+    // 3x3 around spawn (1,1): only the (2,2) hard pillar may be non-walk
+    for (let r = 1; r <= 3; r++)
+      for (let c = 1; c <= 3; c++) {
+        if (c === 2 && r === 2) continue
+        if (g.grid[r][c].t !== 0) bad++
+      }
+  }
+  check('no soft bricks in spawn 3x3 (25 levels)', bad === 0, `bricks=${bad}`)
+  const b = new Game('battle', { aiPlayer2: true })
+  let badB = 0
+  for (const s of [
+    { c: 1, r: 1, dc: 1, dr: 1 }, { c: 13, r: 1, dc: -1, dr: 1 },
+    { c: 1, r: 11, dc: 1, dr: -1 }, { c: 13, r: 11, dc: -1, dr: -1 },
+  ])
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++) {
+        const c = s.c + s.dc * i, r = s.r + s.dr * j
+        if (c <= 0 || r <= 0 || c >= 14 || r >= 12) continue // border
+        if (Math.abs(c - s.c) + Math.abs(r - s.r) === 2 && i === 1 && j === 1) continue // pillar
+        if (b.grid[r][c].t !== 0) badB++
+      }
+  check('no soft bricks in battle spawn corners', badB === 0, `bricks=${badB}`)
+}
+
 console.log('— Explosion mechanics —')
 {
   const g = new Game('campaign')

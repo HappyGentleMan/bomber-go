@@ -30,10 +30,11 @@ export const SPAWNS = [
   { col: COLS - 2, row: ROWS - 2 },
 ]
 
-function clearAround(grid: Grid, c: number, r: number) {
-  for (let dr = -1; dr <= 1; dr++)
-    for (let dc = -1; dc <= 1; dc++) {
-      const cc = c + dc, rr = r + dr
+/** clear a 3x3 corner (3 tiles deep) from a spawn — open start, no bricks boxing the player in */
+function clearSpawnCorner(grid: Grid, c: number, r: number, dirC: 1 | -1, dirR: 1 | -1) {
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) {
+      const cc = c + dirC * i, rr = r + dirR * j
       if (cc > 0 && rr > 0 && cc < COLS - 1 && rr < ROWS - 1)
         if (grid[rr][cc].t !== T_HARD) grid[rr][cc].t = T_WALK
     }
@@ -115,9 +116,6 @@ export function generateLevel(level: number): LevelDef {
     for (let c = 2; c < COLS - 1; c += 2)
       grid[r][c].t = T_HARD
 
-  // player spawn corner is clean
-  clearAround(grid, 1, 1)
-
   // soft bricks
   const brickDensity = Math.min(0.68, 0.42 + level * 0.015)
   const softCells: { col: number; row: number }[] = []
@@ -128,6 +126,10 @@ export function generateLevel(level: number): LevelDef {
         softCells.push({ col: c, row: r })
       }
     }
+
+  // player spawn corner is clean — MUST run after brick placement, otherwise
+  // the bricks above land right on top of the spawn and box the player in
+  clearSpawnCorner(grid, 1, 1, 1, 1)
 
   // powerups hidden in bricks
   const powerups: LevelDef['powerups'] = []
@@ -196,7 +198,6 @@ export function generateBattleMap(): LevelDef {
   for (let r = 2; r < ROWS - 1; r += 2)
     for (let c = 2; c < COLS - 1; c += 2)
       grid[r][c].t = T_HARD
-  for (const s of SPAWNS) clearAround(grid, s.col, s.row)
 
   const softCells: { col: number; row: number }[] = []
   for (let r = 1; r < ROWS - 1; r++)
@@ -217,6 +218,12 @@ export function generateBattleMap(): LevelDef {
       powerups.push({ col: cell.col, row: cell.row, kind })
     }
   }
+  // spawn corners must be clean — after brick placement so bricks can't
+  // land on the spawn tiles and box players in
+  clearSpawnCorner(grid, 1, 1, 1, 1)
+  clearSpawnCorner(grid, COLS - 2, 1, -1, 1)
+  clearSpawnCorner(grid, 1, ROWS - 2, 1, -1)
+  clearSpawnCorner(grid, COLS - 2, ROWS - 2, -1, -1)
   ensureConnectivity(grid, [
     ...SPAWNS,
     ...powerups,

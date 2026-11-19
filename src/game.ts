@@ -5,6 +5,7 @@ import {
   SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION, KICK_DURATION,
   MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME, BATTLE_ROUND_TARGET,
   POWERUP_DEFS, POWERUP_KINDS, POWERUP_DROP_CHANCE, MAX_POWERUPS_ON_FIELD,
+  ENEMY_SPEED_SCALE,
 } from './constants'
 import type { Dir } from './constants'
 import type {
@@ -270,10 +271,10 @@ export class Game {
         continue
       }
       const inp = inputs[p.id] ?? { dir: null, bomb: false, detonate: false }
-      // Only buffer a direction while idle. Setting it every frame while already
-      // moving left it stale after the tile completed, so a single tap would walk
-      // TWO tiles (the buffered dir re-triggered the next step).
-      if (inp.dir !== null && !p.moving) p.movingDir = inp.dir
+      // Live held direction (null when no key is down). moveEntity uses it to
+      // glide seamlessly into the next tile: a tap stops at the next tile
+      // boundary, a hold keeps gliding with no per-tile hitch (choppy feel).
+      p.movingDir = inp.dir
       if (inp.bomb) this.tryPlaceBomb(p)
       if (inp.detonate) {
         const oldest = this.bombs.filter(b => b.owner === p.id).sort((a, b) => a.born - b.born)[0]
@@ -322,10 +323,7 @@ export class Game {
         if (this.canEnter(e, e.col + dc, e.row + dr)) {
           e.dir = d
           e.moving = true
-          e.movingDir = null
           if (Math.random() < 0.5) audio.play('step')
-        } else {
-          e.movingDir = null
         }
       }
       return
@@ -340,8 +338,20 @@ export class Game {
     if (arrived) {
       e.col = nc; e.row = nr
       e.x = nc; e.y = nr
-      e.moving = false
       this.onEntityArrive(e)
+      // Seamless glide: if the direction is still held and the next tile is
+      // open, start the next tile immediately — no 1-frame stop between
+      // tiles (the stop is what made movement look choppy).
+      const d = e.movingDir
+      if (d !== null) {
+        const [dc2, dr2] = dirVec(d)
+        if (this.canEnter(e, e.col + dc2, e.row + dr2)) {
+          e.dir = d
+          e.moving = true
+          return
+        }
+      }
+      e.moving = false
     }
   }
 
@@ -482,7 +492,7 @@ export class Game {
       const def = ENEMY_DEFS[e.type]
       e.aiTimer -= dt
       // decide direction on tile arrival (moveTimer used as decision cadence)
-      const speed = def.speed * speedMul * (e.frozen ? 0 : 1)
+      const speed = def.speed * ENEMY_SPEED_SCALE * speedMul * (e.frozen ? 0 : 1)
       this.moveEnemy(e, dt, speed, def, target)
     }
     // flame deaths
@@ -519,8 +529,22 @@ export class Game {
     const arrived = dc !== 0 ? (dc > 0 ? e.x >= nc : e.x <= nc) : (dr > 0 ? e.y >= nr : e.y <= nr)
     if (arrived) {
       e.col = nc; e.row = nr; e.x = nc; e.y = nr
-      e.moving = false
-      e.aiTimer = def.ai === 'wander' ? 0.8 + e.seed * 1.8 : 0
+      if (def.ai === 'wander') {
+        // wanderers pause between tiles (deliberate loping gait)
+        e.aiTimer = 0.8 + e.seed * 1.8
+        e.moving = false
+        return
+      }
+      // chasers: re-decide and continue immediately — no 1-frame stop per
+      // tile (keeps pursuit smooth instead of choppy)
+      e.dir = this.enemyDecide(e, def, target)
+      let [dc2, dr2] = dirVec(e.dir)
+      if (!this.canEnter(e, e.col + dc2, e.row + dr2)) {
+        e.dir = this.enemyDecide(e, def, target)
+        ;[dc2, dr2] = dirVec(e.dir)
+      }
+      e.moving = this.canEnter(e, e.col + dc2, e.row + dr2)
+      e.movingDir = null
     }
   }
 

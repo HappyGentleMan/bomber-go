@@ -53,6 +53,10 @@ export const MAX_FLAME = 8
 export const POWERUP_DROP_CHANCE = 0.4
 export const MAX_POWERUPS_ON_FIELD = 5
 
+// Enemy speed multiplier (player glides at ~4.2 tiles/s; keep enemies clearly
+// slower so they feel avoidable, not punishing)
+export const ENEMY_SPEED_SCALE = 0.65
+
 export const START_LIVES = 3
 export const LEVEL_TIME = 180 // seconds
 export const BATTLE_TIME = 120

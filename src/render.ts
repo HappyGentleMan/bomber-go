@@ -13,6 +13,15 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
+/** lighten (amt > 0) or darken (amt < 0) a #rrggbb color */
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const r = Math.max(0, Math.min(255, (n >> 16) + amt))
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt))
+  const b = Math.max(0, Math.min(255, (n & 0xff) + amt))
+  return `rgb(${r},${g},${b})`
+}
+
 export class Renderer {
   ctx: CanvasRenderingContext2D
   canvas: HTMLCanvasElement
@@ -21,6 +30,8 @@ export class Renderer {
   /** pre-rendered flame sprites (gradients are expensive per-frame) */
   private flameSprite: HTMLCanvasElement | null = null
   private flameArmSprite: HTMLCanvasElement | null = null
+  /** pre-rendered cinematic vignette (subtle dark corners, always on) */
+  private vignetteSprite: HTMLCanvasElement | null = null
   /** ambient dust motes drifting over the floor (cheap, adds life) */
   private motes: { x: number; y: number; vx: number; vy: number; ph: number; sz: number }[] = []
 
@@ -80,6 +91,26 @@ export class Renderer {
       ctx.fillStyle = g
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
     }
+    // always-on cinematic vignette (focus + depth)
+    if (!this.vignetteSprite) {
+      const cv = document.createElement('canvas')
+      cv.width = CANVAS_W; cv.height = CANVAS_H
+      const c = cv.getContext('2d')!
+      const g = c.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.42, CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.72)
+      g.addColorStop(0, 'rgba(0,0,0,0)')
+      g.addColorStop(0.75, 'rgba(0,0,10,0.10)')
+      g.addColorStop(1, 'rgba(0,0,10,0.34)')
+      c.fillStyle = g
+      c.fillRect(0, 0, CANVAS_W, CANVAS_H)
+      // top light (subtle sky glow)
+      const tl = c.createLinearGradient(0, 0, 0, 90)
+      tl.addColorStop(0, 'rgba(140,190,255,0.05)')
+      tl.addColorStop(1, 'rgba(140,190,255,0)')
+      c.fillStyle = tl
+      c.fillRect(0, 0, CANVAS_W, 90)
+      this.vignetteSprite = cv
+    }
+    ctx.drawImage(this.vignetteSprite, 0, 0)
     // full-screen flash (big combos / level clear)
     const fa = game.getFlashAlpha()
     if (fa > 0) {
@@ -104,6 +135,12 @@ export class Renderer {
           c.fillStyle = th.floorAlt
           c.fillRect(cc * TILE, r * TILE, TILE, TILE)
         }
+        // subtle deterministic per-tile variation (richer, less flat)
+        const v = ((cc * 7 + r * 13) % 5) - 2
+        if (v !== 0) {
+          c.fillStyle = v > 0 ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.03)'
+          c.fillRect(cc * TILE, r * TILE, TILE, TILE)
+        }
       }
     // grid lines
     c.strokeStyle = th.grid
@@ -112,6 +149,12 @@ export class Renderer {
     for (let cc = 0; cc <= COLS; cc++) { c.moveTo(cc * TILE + 0.5, 0); c.lineTo(cc * TILE + 0.5, CANVAS_H) }
     for (let r = 0; r <= ROWS; r++) { c.moveTo(0, r * TILE + 0.5); c.lineTo(CANVAS_W, r * TILE + 0.5) }
     c.stroke()
+    // soft center light pool (depth + focal point)
+    const light = c.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, 60, CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.62)
+    light.addColorStop(0, 'rgba(160,200,255,0.055)')
+    light.addColorStop(1, 'rgba(0,0,0,0)')
+    c.fillStyle = light
+    c.fillRect(0, 0, CANVAS_W, CANVAS_H)
     this.floorCache.set(th.floor, cv)
     return cv
   }
@@ -156,6 +199,11 @@ export class Renderer {
     const h = hard.getContext('2d')!, b = soft.getContext('2d')!
     const T = TILE
     // hard wall
+    // drop shadow (raised-block depth)
+    h.fillStyle = 'rgba(0,0,0,0.32)'
+    roundRect(h, 2, 5, T - 4, T - 5, 8); h.fill()
+    h.fillStyle = 'rgba(0,0,0,0.18)'
+    roundRect(h, 3, 7, T - 6, T - 7, 7); h.fill()
     h.fillStyle = th.hardFill
     roundRect(h, 1, 1, T - 2, T - 2, 8); h.fill()
     h.strokeStyle = th.hardEdge
@@ -164,6 +212,10 @@ export class Renderer {
     h.fillStyle = 'rgba(255,255,255,0.04)'
     roundRect(h, 9, 9, T - 18, T - 18, 4); h.fill()
     // soft brick
+    b.fillStyle = 'rgba(0,0,0,0.30)'
+    roundRect(b, 2, 5, T - 4, T - 5, 6); b.fill()
+    b.fillStyle = 'rgba(0,0,0,0.16)'
+    roundRect(b, 3, 7, T - 6, T - 7, 5); b.fill()
     b.fillStyle = th.brickFill
     roundRect(b, 1, 1, T - 2, T - 2, 6); b.fill()
     b.strokeStyle = 'rgba(0,0,0,0.35)'
@@ -231,6 +283,9 @@ export class Renderer {
       const y = u.row * TILE + TILE / 2 + Math.sin(t * 3 + u.col) * 2
       ctx.save()
       ctx.translate(x, y)
+      // ground shadow (floats above it)
+      ctx.fillStyle = 'rgba(0,0,0,0.30)'
+      ctx.beginPath(); ctx.ellipse(0, 14 - Math.sin(t * 3 + u.col) * 2, 10, 3.5, 0, 0, Math.PI * 2); ctx.fill()
       // glow
       const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 20)
       g.addColorStop(0, def.color + 'aa')
@@ -402,12 +457,16 @@ export class Renderer {
     if (p.wallpassUntil > game.time) ctx.globalAlpha = 0.65
 
     const bodyC = p.color
-    // body
-    ctx.fillStyle = bodyC
+    // body (vertical gradient for a rounded, lit look)
+    const bodyG = ctx.createLinearGradient(0, -12, 0, 14)
+    bodyG.addColorStop(0, '#ffffff')
+    bodyG.addColorStop(0.25, bodyC)
+    bodyG.addColorStop(1, shade(bodyC, -40))
+    ctx.fillStyle = bodyG
     roundRect(ctx, -13, -12, 26, 26, 9)
     ctx.fill()
     // helmet top
-    ctx.fillStyle = 'rgba(255,255,255,0.92)'
+    ctx.fillStyle = 'rgba(255,255,255,0.94)'
     roundRect(ctx, -13, -14, 26, 14, 9)
     ctx.fill()
     ctx.fillStyle = bodyC
