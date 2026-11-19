@@ -49,6 +49,10 @@ export const KICK_DURATION = 8_000
 export const MAX_BOMBS = 8
 export const MAX_FLAME = 8
 
+// Powerup drops: chance per enemy kill (final enemy of a level always drops one)
+export const POWERUP_DROP_CHANCE = 0.4
+export const MAX_POWERUPS_ON_FIELD = 5
+
 export const START_LIVES = 3
 export const LEVEL_TIME = 180 // seconds
 export const BATTLE_TIME = 120

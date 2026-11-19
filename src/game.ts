@@ -4,7 +4,7 @@ import {
   BOMB_FUSE, BOMB_FUSE_MIN, FLAME_DURATION, SPAWN_INVULN,
   SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION, KICK_DURATION,
   MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME, BATTLE_ROUND_TARGET,
-  POWERUP_DEFS,
+  POWERUP_DEFS, POWERUP_KINDS, POWERUP_DROP_CHANCE, MAX_POWERUPS_ON_FIELD,
 } from './constants'
 import type { Dir } from './constants'
 import type {
@@ -57,6 +57,7 @@ export class Game {
   freezeUntil = 0     // global enemy freeze
   suddenDeath = false
   suddenTick = 0
+  battleNextItem = 12   // battle: seconds until next item drop
   killChain = 0
   clearTimer = 0
   overTimer = 0
@@ -380,7 +381,7 @@ export class Game {
   killPlayer(p: PlayerState, cause: 'flame' | 'enemy') {
     if (p.invincibleUntil > this.time && cause === 'enemy') return
     p.alive = false
-    // drop temp powerups
+    // lose timed powerups on death
     p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
     const cx = p.x * 48 + 24, cy = p.y * 48 + 24
     this.particles.burst(cx, cy, p.color, 26, 220)
@@ -655,6 +656,28 @@ export class Game {
     if (this.killChain === 2) this.flash('255,46,136', 0.10, 0.18)
     else if (this.killChain === 3) { this.flash('255,213,74', 0.16, 0.22); this.hitStop(0.15, 0.16) }
     else if (this.killChain >= 4) { this.flash('255,82,82', 0.24, 0.3); this.hitStop(0.1, 0.22) }
+    // powerup drop: weighted by def.weight; guaranteed on the level's final enemy
+    const enemiesLeft = this.enemies.filter(x => x.alive).length
+    const chance = enemiesLeft === 0 ? 1 : POWERUP_DROP_CHANCE
+    if (
+      Math.random() < chance &&
+      this.powerups.length < MAX_POWERUPS_ON_FIELD &&
+      !this.powerups.some(u => u.col === e.col && u.row === e.row)
+    ) {
+      this.powerups.push({ col: e.col, row: e.row, kind: this.weightedPowerupKind(), born: this.time })
+      this.particles.text(cx, cy - 26, 'ITEM!', '#fff176')
+    }
+  }
+
+  /** pick a powerup kind using POWERUP_DEFS weights (bomb/flame common, life rare) */
+  private weightedPowerupKind() {
+    const total = POWERUP_KINDS.reduce((s, k) => s + POWERUP_DEFS[k].weight, 0)
+    let r = Math.random() * total
+    for (const k of POWERUP_KINDS) {
+      r -= POWERUP_DEFS[k].weight
+      if (r <= 0) return k
+    }
+    return POWERUP_KINDS[POWERUP_KINDS.length - 1]
   }
 
   // ---------------- bombs & flames ----------------
@@ -802,6 +825,7 @@ export class Game {
     this.time = 0
     this.suddenDeath = false
     this.suddenTick = 0
+    this.battleNextItem = 12
     this.killChain = 0
     this.aiState.clear()
     for (const p of this.players) {
@@ -878,6 +902,25 @@ export class Game {
         if (this.suddenTick <= 0) {
           this.suddenTick = 2
           this.battleSuddenDeath()
+        }
+      }
+      // battle: periodic item drops on open tiles (no enemies to kill, so
+      // campaign's kill-drops never happen here; AI already hunts these)
+      this.battleNextItem -= gdt
+      if (this.battleNextItem <= 0 && this.state === 'playing') {
+        this.battleNextItem = 16 + Math.random() * 8
+        const spots: { c: number; r: number }[] = []
+        for (let r = 1; r < ROWS - 1; r++)
+          for (let c = 1; c < COLS - 1; c++) {
+            if (this.tile(c, r) !== T_WALK) continue
+            if (this.bombAt(c, r)) continue
+            if (this.players.some(p => p.alive && p.col === c && p.row === r)) continue
+            if (this.powerups.some(u => u.col === c && u.row === r)) continue
+            spots.push({ c, r })
+          }
+        if (spots.length) {
+          const s = spots[Math.floor(Math.random() * spots.length)]
+          this.powerups.push({ col: s.c, row: s.r, kind: this.weightedPowerupKind(), born: this.time })
         }
       }
     }

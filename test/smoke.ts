@@ -98,6 +98,40 @@ console.log('— Powerup pickup —')
   check('flame pickup raises range', p.flame === 2, `flame=${p.flame}`)
 }
 
+console.log('— Powerup drops —')
+{
+  // kills drop items: 20 fresh levels, kill everyone, count drops
+  let drops = 0
+  for (let i = 0; i < 20; i++) {
+    const g = new Game('campaign')
+    for (const e of g.enemies) g.killEnemy(e, null, false)
+    drops += g.powerups.length
+  }
+  check('kills drop powerups (expect ~40+)', drops > 15, `drops=${drops}/20 levels`)
+
+  // the level's FINAL enemy is a guaranteed drop
+  {
+    const g = new Game('campaign')
+    const alive = g.enemies.filter(e => e.alive)
+    for (const e of alive.slice(0, -1)) g.killEnemy(e, null, false)
+    g.powerups = [] // simulate the player collecting everything so far
+    const last = g.enemies.filter(e => e.alive)[0]
+    g.killEnemy(last, null, false)
+    check('final enemy always drops an item', g.powerups.length === 1, `powerups=${g.powerups.length}`)
+  }
+}
+
+console.log('— Battle item spawn —')
+{
+  const b = new Game('battle', { aiPlayer2: true, attract: true })
+  b.battleNextItem = 0
+  tick(b, 0)
+  check('battle item spawns', b.powerups.length === 1, `powerups=${b.powerups.length}`)
+  const u = b.powerups[0]
+  const free = b.grid[u.row][u.col].t === 0 && !b.players.some(p => p.alive && p.col === u.col && p.row === u.row)
+  check('battle item on open unoccupied tile', free, `tile=(${u.col},${u.row})`)
+}
+
 console.log('— Campaign bot run (invincible, 60s) —')
 {
   const g = new Game('campaign')
