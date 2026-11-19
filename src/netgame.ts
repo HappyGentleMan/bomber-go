@@ -21,7 +21,7 @@ export function serializeGame(g: Game): any {
       +p.wallpassUntil.toFixed(2), +p.kickUntil.toFixed(2), +p.frozenUntil.toFixed(2),
       p.kills, p.respawnIn,
     ]),
-    bombs: g.bombs.map(b => [b.col, b.row, Math.round(b.fuse), b.power, b.owner]),
+    bombs: g.bombs.map(b => [b.id, b.col, b.row, Math.round(b.fuse), b.power, b.owner, +b.x.toFixed(3), +b.y.toFixed(3), b.sliding]),
     flames: g.flames.map(f => [f.col, f.row, f.dir, +f.ttl.toFixed(3), f.seed]),
     powerups: g.powerups.map(u => [u.col, u.row, u.kind, u.revealed ? 1 : 0]),
     enemies: g.enemies.map(e => [
@@ -97,7 +97,7 @@ export class RemoteGame {
   apply(s: any) {
     if (!s) return
     // remember old positions so the renderer can lerp between snapshots
-    const oldP = this.players, oldE = this.enemies
+    const oldP = this.players, oldE = this.enemies, oldB = this.bombs
     const prevOf = (o: any, x: number, y: number): [number, number] => {
       if (!o) return [x, y]
       const dx = x - o.x, dy = y - o.y
@@ -133,7 +133,16 @@ export class RemoteGame {
         color: i === 0 ? '#00e5ff' : '#ff2e88',
       }
     })
-    this.bombs = s.bombs.map((b: any[]) => ({ col: b[0], row: b[1], fuse: b[2], power: b[3], owner: b[4] }))
+    const oldBMap = new Map(oldB.map((bb: any) => [bb.id, bb]))
+    this.bombs = s.bombs.map((b: any[]) => {
+      const o = oldBMap.get(b[0])
+      const near = o && (b[6] - o.x) ** 2 + (b[7] - o.y) ** 2 <= 2.25
+      return {
+        id: b[0], col: b[1], row: b[2], fuse: b[3], power: b[4], owner: b[5],
+        x: b[6] ?? b[1], y: b[7] ?? b[2], prevX: near ? o.x : b[6], prevY: near ? o.y : b[7],
+        sliding: b[8] ?? null,
+      }
+    })
     this.flames = s.flames.map((f: any[]) => ({ col: f[0], row: f[1], dir: f[2], ttl: f[3], seed: f[4] }))
     this.powerups = s.powerups.map((u: any[]) => ({ col: u[0], row: u[1], kind: u[2] as PowerupKind, born: 0, revealed: !!u[3] }))
     this.enemies = s.enemies.map((e: any[], i: number) => {

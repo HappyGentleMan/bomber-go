@@ -123,7 +123,7 @@ export class Renderer {
     this.drawPowerups(ctx, game, t)
     game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
-    for (const b of game.bombs) this.drawBomb(ctx, b, t)
+    for (const b of game.bombs) this.drawBomb(ctx, b, t, alpha)
     for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t, game.time, alpha)
     for (const p of game.players) if (p.alive) this.drawPlayer(ctx, p, t, game, alpha)
     game.particles.draw(ctx)
@@ -403,9 +403,10 @@ export class Renderer {
     return cv
   }
 
-  private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number) {
-    const x = b.col * TILE + TILE / 2
-    const y = b.row * TILE + TILE / 2
+  private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number, alpha = 1) {
+    const pos = lerpPos(b, alpha)
+    const x = pos.x * TILE + TILE / 2
+    const y = pos.y * TILE + TILE / 2
     // natural fuse pulse: slow calm breathing (~0.5 Hz) that gently
     // speeds up as the fuse burns down (~1.2 Hz at the end)
     const f = Math.max(0, Math.min(1, b.fuse / 2000))

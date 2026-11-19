@@ -48,6 +48,8 @@ export interface BombState {
   id: number
   owner: number
   col: number; row: number
+  x: number; y: number        // float tile coords (kicked bombs slide between tiles)
+  sliding: Dir | null         // kicked: sliding in this dir until it hits something
   fuse: number
   power: number
   born: number

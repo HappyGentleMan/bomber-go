@@ -260,6 +260,7 @@ export class Game {
     this.bombs.push({
       id: this.bombId++, owner: p.id,
       col: p.col, row: p.row,
+      x: p.col, y: p.row, sliding: null,
       fuse, power: p.flame, born: this.time,
     })
     const c = this.particles.tileCenter(p.col, p.row)
@@ -402,7 +403,8 @@ export class Game {
     e.moving = !blocked
   }
 
-  /** KICK powerup: bumping into a bomb sends it sliding one tile further. */
+  /** KICK powerup: bumping into a bomb sends it sliding across the stage
+   *  until it hits a wall, brick, bomb or player (classic Bomb Kick). */
   private tryKickForward(p: PlayerState) {
     if (p.kickUntil <= this.time) return
     const [dc, dr] = dirVec(p.dir)
@@ -412,14 +414,12 @@ export class Game {
     const tc = Math.round(p.x) + dc
     const tr = Math.round(p.y) + dr
     const b = this.bombAt(tc, tr)
-    if (!b) return
-    const kc = tc + dc, kr = tr + dr
-    if (this.tile(kc, kr) === T_WALK && !this.bombAt(kc, kr) && !this.enemyAt(kc, kr)) {
-      b.col = kc; b.row = kr
-      audio.play('kick')
-      this.particles.text(kc * 48 + 24, kr * 48 + 12, 'KICK!', '#ffab91')
-      this.particles.dust(kc * 48 + 24, kr * 48 + 24)
-    }
+    if (!b || b.sliding !== null) return
+    b.sliding = p.dir
+    b.x = b.col; b.y = b.row
+    audio.play('kick')
+    this.particles.text(tc * 48 + 24, tr * 48 + 12, 'KICK!', '#ffab91')
+    this.particles.dust(tc * 48 + 24, tr * 48 + 24)
   }
 
   levelClear() {
@@ -758,8 +758,44 @@ export class Game {
   // ---------------- bombs & flames ----------------
 
   updateBombs(dt: number) {
+    this.updateBombSlides(dt)
     for (const b of this.bombs) b.fuse -= dt * 1000
     for (const b of this.bombs.filter(b => b.fuse <= 0)) this.detonate(b)
+  }
+
+  /** Kicked bombs slide until they collide with a wall, brick, bomb or player
+   *  (classic Bomb Kick). They plough through enemies on the way. */
+  private updateBombSlides(dt: number) {
+    const SPEED = 11 // tiles/second
+    for (const b of this.bombs) {
+      if (b.sliding === null) continue
+      const [dc, dr] = dirVec(b.sliding)
+      let step = SPEED * dt
+      while (step > 1e-6) {
+        const curC = Math.round(b.x), curR = Math.round(b.y)
+        const aheadC = curC + dc, aheadR = curR + dr
+        const t = this.tile(aheadC, aheadR)
+        const blocked =
+          t === T_HARD || t === T_SOFT ||
+          this.bombAt(aheadC, aheadR) !== undefined ||
+          this.players.some(pl => pl.alive && Math.round(pl.x) === aheadC && Math.round(pl.y) === aheadR)
+        if (blocked) {
+          // stop flush against the obstacle: snap back to the current tile
+          b.x = curC; b.y = curR
+          b.col = curC; b.row = curR
+          b.sliding = null
+          break
+        }
+        const toNext = (aheadC - b.x) * dc + (aheadR - b.y) * dr
+        const adv = Math.min(step, toNext)
+        b.x += dc * adv; b.y += dr * adv
+        step -= adv
+        b.col = Math.round(b.x); b.row = Math.round(b.y)
+        // plough through enemies (Super Bomberman: a kicked bomb squashes them)
+        const e = this.enemies.find(e => e.alive && Math.round(e.x) === b.col && Math.round(e.y) === b.row)
+        if (e) this.killEnemy(e, b.owner >= 0 ? this.players[b.owner] : null, true)
+      }
+    }
   }
 
   detonate(b: BombState, chain = false) {
@@ -868,7 +904,7 @@ export class Game {
       }
     }
     if (c < 0) return
-    this.bombs.push({ id: this.bombId++, owner: -1, col: c, row: r, fuse: 1500, power: 2, born: this.time })
+    this.bombs.push({ id: this.bombId++, owner: -1, col: c, row: r, x: c, y: r, sliding: null, fuse: 1500, power: 2, born: this.time })
     audio.play('bomb')
   }
 
