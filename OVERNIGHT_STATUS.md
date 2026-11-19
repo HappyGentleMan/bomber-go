@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~6:10 PM · **State: joystick + KICK-at-start in (7d3a242), all tests green, ready to push**
+**Last updated:** Nov 19, ~7:40 PM · **State: classic Bomb Kick slide in (7e1e7d9), all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,16 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Classic Bomb Kick slide (this round, commit 7e1e7d9)
+
+The kick is now the real Bomb Kick (Bomberman '93+): one kick sends the
+bomb **sliding across the stage until it hits a wall, brick, bomb or
+player** (11 tiles/s, per-tile collision, stops flush against the
+obstacle). It ploughs through enemies on the way (kill credited to the
+bomb's owner, Super Bomberman style). Mid-slide detonation happens at
+the bomb's current tile. Online clients get id + x/y + sliding in
+snapshots and lerp the bomb like players.
 
 ## Joystick + KICK-at-start (this round, commit 7d3a242)
 
