@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~12:40 PM · **State: continuous (free-space) movement in, all tests green, ready to push**
+**Last updated:** Nov 19, ~12:55 PM · **State: continuous (free-space) movement committed (155d548), all tests green, ready to push**
 
 ## What got done overnight
 
@@ -69,7 +69,7 @@ npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
 
-## Continuous free-space movement (this round, latest)
+## Continuous free-space movement (this round, commit 155d548)
 
 Movement is no longer fixated on the unit grid — ported the DeepSeek
 reference's free-space model:

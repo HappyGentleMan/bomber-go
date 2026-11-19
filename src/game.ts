@@ -334,7 +334,8 @@ export class Game {
     const t = this.tile(c, r)
     if (t === T_HARD) return true
     if (t === T_SOFT) {
-      if (e.isAI !== undefined) return (e.wallpassUntil ?? 0) > this.time
+      // solid UNLESS the entity can pass walls (player wallpass powerup)
+      if (e.isAI !== undefined) return (e.wallpassUntil ?? 0) <= this.time
       return !ENEMY_DEFS[e.type!].wallpass
     }
     if (this.bombAt(c, r)) return true
