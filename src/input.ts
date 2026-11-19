@@ -26,6 +26,7 @@ class InputManager {
 
   private touchDir: Dir | null = null
   private touchBomb = false
+  private touchDetonate = false
 
   attach() {
     window.addEventListener('keydown', this.onKeyDown)
@@ -103,6 +104,7 @@ class InputManager {
     // touch
     const tDir = this.touchDir
     if (this.touchBomb) { this.p1.bomb = true; this.touchBomb = false }
+    if (this.touchDetonate) { this.p1.detonate = true; this.touchDetonate = false }
 
     const dir1 = this.lastDir1 ?? pd1 ?? tDir
     const dir2 = this.lastDir2 ?? pd2
@@ -131,6 +133,7 @@ class InputManager {
 
   setTouchDir(d: Dir | null) { this.touchDir = d }
   setTouchBomb() { this.touchBomb = true }
+  setTouchDetonate() { this.touchDetonate = true }
 }
 
 export const input = new InputManager()

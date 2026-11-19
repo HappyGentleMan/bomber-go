@@ -77,7 +77,7 @@ function layoutTouch() {
   const moveEl = joy ? joyCluster : dpad
   const moveW = joy ? 128 : 178
   const moveH = joy ? 128 : 116
-  const actW = 84, actH = 138
+  const actW = 150, actH = 138
   if (side >= moveW + 16) {
     // landscape: black bars on the left & right (cluster fits fully)
     moveEl.style.left = `${Math.max(8, side / 2 - moveW / 2)}px`
@@ -369,12 +369,13 @@ input.onMenuNav = (d) => {
 
 // ---------- touch ----------
 
-function bindTouch(id: string, dir: Dir | null, bomb = false) {
+function bindTouch(id: string, dir: Dir | null, bomb = false, det = false) {
   const el = document.getElementById(id)!
   const on = (e: Event) => {
     e.preventDefault()
     audio.ensure()
     if (bomb) input.setTouchBomb()
+    else if (det) input.setTouchDetonate()
     else input.setTouchDir(dir)
   }
   const off = (e: Event) => {
@@ -393,6 +394,7 @@ bindTouch('t-right', 0)
 bindTouch('t-up', 3)
 bindTouch('t-down', 2)
 bindTouch('t-bomb', null, true)
+bindTouch('t-det', null, false, true)
 
 // ---------- virtual joystick (default mobile movement) ----------
 

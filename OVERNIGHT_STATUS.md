@@ -384,18 +384,30 @@ asserts no hidden item **or exit** is exposed on a walk tile (60 maps).
 
 ## One thing left for you: push to GitHub
 
-Keychain auth can't be driven from this environment (the GUI prompt can't appear).
-In a real Terminal:
+~~Keychain auth can't be driven from this environment~~ — **resolved.** You ran
+`gh-setup.sh` once; the agent can now `git push origin main` directly from its
+own shell (keychain auth works). All commits are pushed to
+`HappyGentleMan/bomber-go`.
 
-```sh
-zsh /Users/anson/.local/share/opencode/gh-setup.sh
-```
+## Mobile: add a DETONATE key (this round)
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (57 commits).
-See `PUSH_TO_GITHUB.md` for details / manual steps.
+Report: mobile touch controls had movement + a BOMB button but **no early-detonate**
+key (the desktop `E`). The engine already had the full `detonate` input path (AI,
+online netcode) — it was a pure UI gap.
+
+- `input.ts` — `touchDetonate` edge, mirroring `touchBomb`; `setTouchDetonate()`.
+- `index.html` — new `#t-det` round button; sits in a `.trow` **beside** BOMB so the
+  action cluster keeps its 138px height (fits portrait letterbars on small phones).
+- `main.ts` — `bindTouch('t-det', …)`; `layoutTouch` action cluster width 84→150.
+
+Verified (headless, 844×390 + 390×844 mockups):
+- Button renders, no canvas overlap in landscape **or** portrait.
+- Chain: touchstart → `setTouchDetonate` → `poll()` delivers `p1.detonate` edge →
+  `game.update` detonates the oldest owned bomb (flames appear). All 3 links pass.
 
 ## Play
 
 - **Career** — WASD + Space, E to detonate
 - **Battle** — P1 WASD+Space · P2 IJKL+Enter · gamepads work too
+- **Mobile** — joystick to move, BOMB to drop, DETONATE to kick/early-blast
 - Debug: `?start=campaign|battle|demo&steps=N`, `&level=N`, `&ai=1`

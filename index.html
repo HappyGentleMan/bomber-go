@@ -212,6 +212,7 @@
     #t-down  { grid-column: 2; grid-row: 2; }
     #t-right { grid-column: 3; grid-row: 2; }
     #t-actions { grid-template-rows: auto auto; gap: 10px; justify-items: center; }
+    .trow { display: flex; gap: 10px; align-items: center; }
     /* virtual joystick (default mobile movement) */
     #joy-base {
       width: 128px; height: 128px; border-radius: 50%;
@@ -241,6 +242,7 @@
     }
     .tbtn:active { background: rgba(0,229,255,.25); }
     #t-bomb  { width: 84px; height: 84px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
+    #t-det   { width: 56px; height: 56px; border-color: rgba(255,120,60,.55); font-size: 8.5px; letter-spacing: .02em; border-radius: 50%; }
     #t-pause { width: 44px; height: 44px; font-size: 16px; border-radius: 50%; }
     /* online room code */
     input.code-input {
@@ -414,7 +416,10 @@
       </div>
       <div class="tcluster" id="t-actions">
         <div class="tbtn" id="t-pause">II</div>
-        <div class="tbtn" id="t-bomb">BOMB</div>
+        <div class="trow">
+          <div class="tbtn" id="t-bomb">BOMB</div>
+          <div class="tbtn" id="t-det">DETONATE</div>
+        </div>
       </div>
     </div>
   </div>
