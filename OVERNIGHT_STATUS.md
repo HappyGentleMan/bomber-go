@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~8:30 PM · **State: permanent KICK + bombs stop at enemies (992cfdd), all tests green, ready to push**
+**Last updated:** Nov 19, late · **State: battle AI rewrite (0efb2d1), all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,42 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Battle AI rewrite: purposeful movement, no suicide (this round, commit 0efb2d1)
+
+Player feedback: the battle AI "moved like she has ADHD" — direction flips
+every tick — and kept killing itself. It also moved slower than the player.
+
+Measured first (new headless harness `test/twitch.ts`, 8×60s): **8 deaths,
+173 90° turns, 963 U-turns per minute**. Full rewrite of the decision loop:
+
+- **Physical box probe** (`canStep`) replaces derived-tile checks in every
+  per-tick heading decision — the root of the 60 Hz jiggle
+- **Full-blast pathfinding** — BFS avoids the full blast of *every* live
+  bomb, not just imminent flames (routing through a live radius sent the bot
+  straight back into the blast it had just escaped, oscillating on the edge)
+- **Threat override** — box-aware imminent set, committed escape routes, and
+  flee only from *uncontrolled* approaches (a lined-up enemy is bombable, so
+  the bot no longer bolts from every visible opponent)
+- **Standoff state machine** with hysteresis (enter ≤3 / exit ≥4.5 free
+  distance): on line + in range → close in for the kill; on line out of range
+  → hold; off line → walk to the nearest **line-up tile** (the only position
+  a bomb can connect from), powerup detour as fallback. Unreachable
+  line-up targets are remembered (`triedLineup`) so the bot falls through to
+  the next fallback instead of re-planning to the same dead tile forever
+- **Powerup detour with hysteresis** — keep the chosen target while it is
+  valid; re-picking the nearest one every tick flip-flopped the bot between
+  two powerups at the distance midpoint
+- **Stall detection + bomb-the-brick escape** for sealed pockets; **noBricks**
+  makes a proven-unbombleable brick impassable
+- **wanderDir v2** — 2-tile lookahead, anti-reversal, danger penalty
+
+Speed was already at player speed (`PLAYER_BASE_SPEED`, no AI discount).
+
+**Result (8×60s headless): deaths 8→0, 90° turns 173→12/min, U-turns
+963→2/min.** Smoke suite green, AI kills in both directions. Debug
+harnesses kept in `test/` (`twitch.ts`, `probe.ts` limit-cycle detector,
+`dstream.ts`, `utrace.ts`, `ptrace.ts`).
 
 ## Permanent KICK + bombs stop at enemies (this round, commit 992cfdd)
 
@@ -210,7 +246,7 @@ In a real Terminal:
 zsh /Users/anson/.local/share/opencode/gh-setup.sh
 ```
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (35 commits).
+That creates the `HappyGentleMan/bomber-go` repo and pushes (54 commits).
 See `PUSH_TO_GITHUB.md` for details / manual steps.
 
 ## Play
