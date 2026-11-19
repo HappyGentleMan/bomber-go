@@ -414,7 +414,7 @@ export class Renderer {
     ctx.fillStyle = 'rgba(0,0,0,0.4)'
     ctx.beginPath(); ctx.ellipse(0, 12, 14, 5, 0, 0, Math.PI * 2); ctx.fill()
     // body (pre-rendered)
-    ctx.drawImage(this.getBombSprite(), -20, -20)
+    ctx.drawImage(this.getBombSprite(), -20, -20, 40, 40)
     // owner ring
     if (b.owner === 0) ctx.strokeStyle = 'rgba(0,229,255,0.8)'
     else if (b.owner === 1) ctx.strokeStyle = 'rgba(255,46,136,0.8)'
