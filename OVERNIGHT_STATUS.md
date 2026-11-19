@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~12:55 PM · **State: continuous (free-space) movement committed (155d548), all tests green, ready to push**
+**Last updated:** Nov 19, ~6:10 PM · **State: joystick + KICK-at-start in (7d3a242), all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,24 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Joystick + KICK-at-start (this round, commit 7d3a242)
+
+- **Virtual joystick** — now the default mobile movement (pointer events,
+  deadzone, dominant-axis → 4 game dirs, knob follows the finger and
+  springs back on release). New `MOVE: JOYSTICK / D-PAD` toggle in
+  settings (persisted); d-pad still available. Sits in the same
+  letterbox slot the d-pad used.
+- **KICK at start** — every player starts each game/level/round with the
+  8s KICK ability, so bomb-pushing works from the first second.
+- **Kick probe fix** — the box stops ~0.06 tile short of the bomb tile, so
+  the old "front of the box" probe rounded back to the player's own tile
+  and kicks never fired; it now probes the tile directly ahead of the
+  centre tile. Verified: bomb chains 2→5→8 while pushed.
+- (Also this session: bomb pulse/spark calmed down — steady twinkling
+  ember instead of 60fps random flicker, 0.5→1.2 Hz breathing; player
+  walking-through-bricks regression fixed in 829f81b; portrait menus go
+  full-screen in 4c39ead.)
 
 ## Continuous free-space movement (this round, commit 155d548)
 
