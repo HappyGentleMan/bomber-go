@@ -1,7 +1,7 @@
 import { audio } from './audio'
 import { settings, updateSettings, getScores, isHighScore, addScore } from './storage'
 
-type Screen = 'title' | 'battle' | 'settings' | 'scores' | 'pause' | 'over' | 'clear' | 'battleover'
+type Screen = 'title' | 'battle' | 'online' | 'settings' | 'scores' | 'pause' | 'over' | 'clear' | 'battleover'
 
 const $ = (id: string) => document.getElementById(id)!
 
@@ -73,10 +73,32 @@ export class UI {
         : ''
     }
     // menu selection state
-    if (screen === 'title' || screen === 'battle') {
-      const menu = $(screen === 'title' ? 'menu-main' : 'menu-battle')
+    if (screen === 'title' || screen === 'battle' || screen === 'online') {
+      const menu = $(screen === 'title' ? 'menu-main' : screen === 'battle' ? 'menu-battle' : 'menu-online')
       this.setMenu(menu)
     }
+  }
+
+  onlineStatus(msg: string, tone: 'info' | 'ok' | 'err' = 'info') {
+    const el = $('online-status')
+    if (!el) return
+    el.textContent = msg
+    el.style.color = tone === 'ok' ? '#7dffa8' : tone === 'err' ? '#ff8080' : 'var(--neon)'
+  }
+
+  onlineCode(code: string) {
+    const el = $('online-code') as HTMLInputElement | null
+    if (el) el.value = code
+  }
+
+  getOnlineCode(): string {
+    const el = $('online-code') as HTMLInputElement | null
+    return el ? el.value.trim().toUpperCase() : ''
+  }
+
+  setRematchHidden(hidden: boolean) {
+    const el = document.querySelector('[data-action="rematch"]')
+    if (el) el.classList.toggle('hidden', hidden)
   }
 
   setMenu(menu: HTMLElement) {
@@ -173,9 +195,9 @@ export class UI {
       `LEVEL ${level} CLEARED<br>BONUS +${bonus.toLocaleString()} · TOTAL ${score.toLocaleString()}<br>❤ ×${lives}`
   }
 
-  showBattleOver(winner: number, kills?: [number, number], cpu = false, rounds?: [number, number]) {
+  showBattleOver(winner: number, kills?: [number, number], cpu = false, rounds?: [number, number], names?: [string, string]) {
     const el = $('battle-result')
-    const name1 = 'PLAYER 1', name2 = cpu ? 'CPU' : 'PLAYER 2'
+    const name1 = names ? names[0] : 'PLAYER 1', name2 = names ? names[1] : (cpu ? 'CPU' : 'PLAYER 2')
     if (winner === -1) { el.textContent = 'DRAW!'; el.style.setProperty('-webkit-text-fill-color', '#888') }
     else {
       el.textContent = winner === 0 ? `${name1} WINS` : `${name2} WINS`

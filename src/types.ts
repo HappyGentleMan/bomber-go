@@ -63,6 +63,8 @@ export interface PowerupState {
   col: number; row: number
   kind: PowerupKind
   born: number
+  /** hidden under a brick until the brick is destroyed (level-generated items) */
+  revealed?: boolean
 }
 
 export interface EnemyState {

@@ -30,13 +30,14 @@ export const SPAWNS = [
   { col: COLS - 2, row: ROWS - 2 },
 ]
 
-/** clear a 3x3 corner (3 tiles deep) from a spawn — open start, no bricks boxing the player in */
-function clearSpawnCorner(grid: Grid, c: number, r: number, dirC: 1 | -1, dirR: 1 | -1) {
+/** clear a 3x3 corner (3 tiles deep) from a spawn — open start, no bricks boxing the player in.
+ *  `keep` cells are left as-is (e.g. bricks hiding powerups) */
+function clearSpawnCorner(grid: Grid, c: number, r: number, dirC: 1 | -1, dirR: 1 | -1, keep?: (cc: number, rr: number) => boolean) {
   for (let i = 0; i < 3; i++)
     for (let j = 0; j < 3; j++) {
       const cc = c + dirC * i, rr = r + dirR * j
       if (cc > 0 && rr > 0 && cc < COLS - 1 && rr < ROWS - 1)
-        if (grid[rr][cc].t !== T_HARD) grid[rr][cc].t = T_WALK
+        if (grid[rr][cc].t !== T_HARD && !keep?.(cc, rr)) grid[rr][cc].t = T_WALK
     }
 }
 
@@ -95,7 +96,12 @@ function pickWeighted(avoidRecent: PowerupKind[]): PowerupKind {
     for (const cell of important) {
       if (!reachable(start.col, start.row, cell.col, cell.row, false)) {
         const path = reachable(start.col, start.row, cell.col, cell.row, true)
-        if (path) for (const p of path) if (grid[p.row][p.col].t === T_SOFT) grid[p.row][p.col].t = T_WALK
+        if (path) for (const p of path) {
+          // keep the target cell itself a brick (items/exits are hidden under
+          // it and revealed when the brick is destroyed)
+          if (p.col === cell.col && p.row === cell.row) continue
+          if (grid[p.row][p.col].t === T_SOFT) grid[p.row][p.col].t = T_WALK
+        }
       }
     }
   }
@@ -178,6 +184,21 @@ export function generateLevel(level: number): LevelDef {
     ...enemySpawns,
   ], { col: 1, row: 1 })
 
+  // connectivity carving can open up a brick that was hiding an item
+  // (the path passes through it). Re-hide those items under another intact
+  // brick so they're only revealed when the player breaks a wall.
+  for (const u of powerups) {
+    if (grid[u.row][u.col].t === T_SOFT) continue
+    const opts = softCells.filter(sc =>
+      grid[sc.row][sc.col].t === T_SOFT &&
+      !(sc.col === exit.col && sc.row === exit.row) &&
+      !powerups.some(o => o !== u && o.col === sc.col && o.row === sc.row))
+    if (opts.length) {
+      const sc = opts[rnd(opts.length)]
+      u.col = sc.col; u.row = sc.row
+    }
+  }
+
   return {
     grid,
     powerups,
@@ -208,15 +229,20 @@ export function generateBattleMap(): LevelDef {
     ;[softCells[i], softCells[j]] = [softCells[j], softCells[i]]
   }
   const nSoft = Math.floor(softCells.length * 0.45)
-  const powerups: LevelDef['powerups'] = []
   for (let i = 0; i < nSoft; i++) {
     const cell = softCells[i]
     grid[cell.row][cell.col].t = T_SOFT
-    if (i < Math.floor(nSoft * 0.25)) {
-      let kind = pickWeighted([])
-      if (kind === 'shrink' || kind === 'shrinkf') kind = Math.random() < 0.5 ? 'shrink' : 'shrinkf'
-      powerups.push({ col: cell.col, row: cell.row, kind })
-    }
+  }
+  // ~25% of the bricks hide a powerup — revealed when the brick breaks.
+  // Never in the spawn corners (open start).
+  const inSpawnCorner = (c: number, r: number) =>
+    (c <= 3 || c >= COLS - 4) && (r <= 3 || r >= ROWS - 4)
+  const itemBricks = softCells.slice(0, nSoft).filter(sc => !inSpawnCorner(sc.col, sc.row))
+  const powerups: LevelDef['powerups'] = []
+  for (const cell of itemBricks.slice(0, Math.floor(itemBricks.length * 0.25))) {
+    let kind = pickWeighted([])
+    if (kind === 'shrink' || kind === 'shrinkf') kind = Math.random() < 0.5 ? 'shrink' : 'shrinkf'
+    powerups.push({ col: cell.col, row: cell.row, kind })
   }
   // spawn corners must be clean — after brick placement so bricks can't
   // land on the spawn tiles and box players in
@@ -228,6 +254,18 @@ export function generateBattleMap(): LevelDef {
     ...SPAWNS,
     ...powerups,
   ], SPAWNS[0])
+  // connectivity carving can open up a brick that was hiding an item —
+  // re-hide those under another intact brick
+  for (const u of powerups) {
+    if (grid[u.row][u.col].t === T_SOFT) continue
+    const opts = softCells.filter(sc =>
+      grid[sc.row][sc.col].t === T_SOFT &&
+      !powerups.some(o => o !== u && o.col === sc.col && o.row === sc.row))
+    if (opts.length) {
+      const sc = opts[rnd(opts.length)]
+      u.col = sc.col; u.row = sc.row
+    }
+  }
   return {
     grid,
     powerups,

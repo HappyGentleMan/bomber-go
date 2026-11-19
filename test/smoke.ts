@@ -153,12 +153,44 @@ console.log('— Powerup drops —')
 console.log('— Battle item spawn —')
 {
   const b = new Game('battle', { aiPlayer2: true, attract: true })
+  const before = b.powerups.length // battle map ships with items hidden in bricks
+  b.players.forEach(p => p.speed = 0) // freeze: spawn is checked before AI could pick it up
   b.battleNextItem = 0
   tick(b, 0)
-  check('battle item spawns', b.powerups.length === 1, `powerups=${b.powerups.length}`)
-  const u = b.powerups[0]
+  check('battle item spawns', b.powerups.length === before + 1, `powerups=${b.powerups.length} (before=${before})`)
+  const u = b.powerups[b.powerups.length - 1]
+  check('spawned item is revealed (not hidden)', u.revealed === true, `revealed=${u.revealed}`)
   const free = b.grid[u.row][u.col].t === 0 && !b.players.some(p => p.alive && p.col === u.col && p.row === u.row)
   check('battle item on open unoccupied tile', free, `tile=(${u.col},${u.row})`)
+}
+
+console.log('— Hidden powerups in destructible bricks —')
+{
+  let tested = 0
+  for (let lvl = 1; lvl <= 6 && tested < 3; lvl++) {
+    const g = new Game('campaign')
+    for (let i = 1; i < lvl; i++) g.nextLevel()
+    const hidden = g.powerups.filter(u => !u.revealed)
+    if (!hidden.length) continue
+    tested++
+    const u = hidden[0]
+    check(`level ${lvl}: item hides under a brick`, g.grid[u.row][u.col].t === 2,
+      `tile=(${u.col},${u.row}) t=${g.grid[u.row][u.col].t}`)
+    g.destroyBrick(u.col, u.row)
+    const now = g.powerups.find(x => x.col === u.col && x.row === u.row)
+    check(`level ${lvl}: breaking the brick reveals it`, now?.revealed === true, `revealed=${now?.revealed}`)
+  }
+  check('campaign levels hide items in bricks (6 levels sampled)', tested > 0, `tested=${tested}`)
+  // stress: NO hidden item may be exposed on a walk tile (campaign + battle)
+  let exposed = 0, maps = 0
+  for (let i = 0; i < 60; i++) {
+    maps++
+    const g = new Game('campaign')
+    for (const u of g.powerups) if (!u.revealed && g.grid[u.row][u.col].t !== 2) exposed++
+    const b = new Game('battle', { aiPlayer2: true, attract: true })
+    for (const u of b.powerups) if (!u.revealed && b.grid[u.row][u.col].t !== 2) exposed++
+  }
+  check('no hidden item exposed on walk tiles (60 maps)', exposed === 0, `exposed=${exposed}`)
 }
 
 console.log('— Campaign bot run (invincible, 60s) —')

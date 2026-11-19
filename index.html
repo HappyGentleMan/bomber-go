@@ -165,24 +165,35 @@
       transition: opacity .22s ease, transform .3s cubic-bezier(.2,1.4,.4,1);
     }
     #banner.show { opacity: 1; transform: scale(1); }
-    /* touch controls */
-    #touch { position: absolute; inset: 0; z-index: 6; pointer-events: none; display: none; }
+    /* touch controls — live in the black letterbox OUTSIDE the canvas (positioned by fit()) */
+    #touch { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
     body.touch #touch { display: block; }
+    .tcluster { position: fixed; pointer-events: auto; display: grid; touch-action: none; }
+    #t-dpad { grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 8px; }
+    #t-up    { grid-column: 2; grid-row: 1; }
+    #t-left  { grid-column: 1; grid-row: 2; }
+    #t-down  { grid-column: 2; grid-row: 2; }
+    #t-right { grid-column: 3; grid-row: 2; }
+    #t-actions { grid-template-rows: auto auto; gap: 10px; justify-items: center; }
     .tbtn {
-      position: absolute; pointer-events: auto;
-      border-radius: 16px; border: 2px solid rgba(0,229,255,.4);
-      background: rgba(10,16,32,.55); color: var(--text);
+      width: 54px; height: 54px;
+      border-radius: 14px; border: 2px solid rgba(0,229,255,.4);
+      background: rgba(10,16,32,.72); color: var(--text);
       display: flex; align-items: center; justify-content: center;
       font-weight: 900; font-size: 20px;
       touch-action: none;
+      box-shadow: 0 4px 14px rgba(0,0,0,.45);
     }
     .tbtn:active { background: rgba(0,229,255,.25); }
-    #t-left  { width: 58px; height: 58px; left: 14px;  bottom: 92px; }
-    #t-right { width: 58px; height: 58px; left: 96px;  bottom: 92px; }
-    #t-up    { width: 58px; height: 58px; left: 55px;  bottom: 164px; }
-    #t-down  { width: 58px; height: 58px; left: 55px;  bottom: 20px; }
-    #t-bomb  { width: 84px; height: 84px; right: 20px; bottom: 36px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; }
-    #t-pause { width: 44px; height: 44px; right: 24px; bottom: 136px; font-size: 16px; }
+    #t-bomb  { width: 84px; height: 84px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
+    #t-pause { width: 44px; height: 44px; font-size: 16px; border-radius: 50%; }
+    /* online room code */
+    input.code-input {
+      font: inherit; font-weight: 900; font-size: 22px; letter-spacing: .35em; text-transform: uppercase;
+      width: 150px; text-align: center;
+      background: #0d1426; color: var(--neon); border: 2px solid rgba(0,229,255,.4); border-radius: 8px; padding: 8px;
+    }
+    input.code-input:focus { outline: none; border-color: var(--neon); box-shadow: 0 0 16px rgba(0,229,255,.3); }
     /* portrait phones: compact overlays so menus fit */
     @media (orientation: portrait) and (max-width: 520px) {
       .overlay { gap: 10px; padding: 12px; overflow-y: auto; }
@@ -208,15 +219,6 @@
       </div>
       <div id="banner"></div>
 
-      <div id="touch">
-        <div class="tbtn" id="t-left">◀</div>
-        <div class="tbtn" id="t-right">▶</div>
-        <div class="tbtn" id="t-up">▲</div>
-        <div class="tbtn" id="t-down">▼</div>
-        <div class="tbtn" id="t-bomb">BOMB</div>
-        <div class="tbtn" id="t-pause">II</div>
-      </div>
-
       <!-- Title -->
       <div id="ui-title" class="overlay">
         <div class="logo">BOMBER GO<small>BLAST · POWER · SURVIVE</small></div>
@@ -224,6 +226,7 @@
         <div class="hint" style="font-size:10px; opacity:.4; letter-spacing:.2em">AI VS AI IN THE BACKGROUND</div>
         <div class="menu" id="menu-main">          <button class="btn primary sel" data-action="campaign">CAREER</button>
           <button class="btn" data-action="battle">BATTLE</button>
+          <button class="btn" data-action="online">ONLINE</button>
           <button class="btn" data-action="scores">SCORES</button>
           <button class="btn" data-action="settings">SETTINGS</button>
         </div>
@@ -308,6 +311,38 @@
           <button class="btn primary" data-action="rematch">REMATCH</button>
           <button class="btn" data-action="to-menu">MENU</button>
         </div>
+      </div>
+
+      <!-- Online -->
+      <div id="ui-online" class="overlay hidden">
+        <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">ONLINE BATTLE</div>
+        <div class="menu" id="menu-online">
+          <button class="btn primary sel" data-action="online-host">CREATE ROOM</button>
+          <button class="btn" data-action="online-join">JOIN WITH CODE</button>
+          <button class="btn" data-action="back">BACK</button>
+        </div>
+        <div class="panel">
+          <div class="row">
+            <input class="code-input" id="online-code" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE" />
+            <button class="btn" style="min-width:0; padding:10px 18px" data-action="online-join">JOIN</button>
+          </div>
+          <div class="hint" id="online-status" style="margin-top:10px; letter-spacing:.08em"></div>
+        </div>
+        <div class="hint">Real-time battle over the internet — share the 5-letter room code with a friend</div>
+      </div>
+    </div>
+
+    <!-- touch controls: black letterbox, outside the canvas -->
+    <div id="touch">
+      <div class="tcluster" id="t-dpad">
+        <div class="tbtn" id="t-up">▲</div>
+        <div class="tbtn" id="t-left">◀</div>
+        <div class="tbtn" id="t-down">▼</div>
+        <div class="tbtn" id="t-right">▶</div>
+      </div>
+      <div class="tcluster" id="t-actions">
+        <div class="tbtn" id="t-pause">II</div>
+        <div class="tbtn" id="t-bomb">BOMB</div>
       </div>
     </div>
   </div>

@@ -24,7 +24,7 @@ let idCounter = 1
 const nid = () => idCounter++
 
 /** haptic feedback: mobile vibration + gamepad rumble (feature-detected, never throws) */
-function haptic(ms: number, strong = 0.8, weak = 0.5) {
+export function haptic(ms: number, strong = 0.8, weak = 0.5) {
   try {
     if (typeof navigator === 'undefined') return
     if ('vibrate' in navigator) (navigator as Navigator & { vibrate(p: number | number[]): boolean }).vibrate(ms)
@@ -90,6 +90,7 @@ export class Game {
     this.levelTime = mode === 'campaign' ? LEVEL_TIME : BATTLE_TIME
     this.def = mode === 'campaign' ? generateLevel(1) : generateBattleMap()
     this.grid = this.def.grid
+    this.powerups = this.def.powerups.map(u => ({ ...u, born: 0, revealed: false }))
     this.spawnPlayers(opts.aiPlayer2 ?? false)
     if (mode === 'battle') this.exit = { col: -1, row: -1, revealed: false }
     else { this.exit = { col: this.def.exitCol, row: this.def.exitRow, revealed: false }; this.spawnEnemies() }
@@ -174,7 +175,7 @@ export class Game {
     this.grid = this.def.grid
     this.bombs = []
     this.flames = []
-    this.powerups = []
+    this.powerups = this.def.powerups.map(u => ({ ...u, born: 0, revealed: false }))
     this.exit = { col: this.def.exitCol, row: this.def.exitRow, revealed: false }
     this.exitTimer = 0
     this.time = 0
@@ -688,7 +689,7 @@ export class Game {
       this.powerups.length < MAX_POWERUPS_ON_FIELD &&
       !this.powerups.some(u => u.col === e.col && u.row === e.row)
     ) {
-      this.powerups.push({ col: e.col, row: e.row, kind: this.weightedPowerupKind(), born: this.time })
+      this.powerups.push({ col: e.col, row: e.row, kind: this.weightedPowerupKind(), born: this.time, revealed: true })
       this.particles.text(cx, cy - 26, 'ITEM!', '#fff176')
     }
   }
@@ -759,11 +760,12 @@ export class Game {
     this.score += 10
     const cx = c * 48 + 24, cy = r * 48 + 24
     this.particles.burst(cx, cy, '#b08050', 12, 150)
-    // powerup?
+    // powerup hidden in this brick? reveal it
     const pi = this.powerups.findIndex(u => u.col === c && u.row === r)
     if (pi >= 0) {
-      // revealed: sparkle in the powerup's color
-      this.particles.burst(cx, cy, POWERUP_DEFS[this.powerups[pi].kind].color, 10, 110)
+      this.powerups[pi].revealed = true
+      this.particles.burst(cx, cy, POWERUP_DEFS[this.powerups[pi].kind].color, 14, 140)
+      this.particles.text(cx, cy - 16, 'ITEM!', POWERUP_DEFS[this.powerups[pi].kind].color)
     }
     // exit?
     if (this.exit.col === c && this.exit.row === r) {
@@ -844,7 +846,7 @@ export class Game {
     this.grid = this.def.grid
     this.bombs = []
     this.flames = []
-    this.powerups = []
+    this.powerups = this.def.powerups.map(u => ({ ...u, born: 0, revealed: false }))
     this.enemies = []
     this.time = 0
     this.suddenDeath = false
@@ -944,7 +946,7 @@ export class Game {
           }
         if (spots.length) {
           const s = spots[Math.floor(Math.random() * spots.length)]
-          this.powerups.push({ col: s.c, row: s.r, kind: this.weightedPowerupKind(), born: this.time })
+          this.powerups.push({ col: s.c, row: s.r, kind: this.weightedPowerupKind(), born: this.time, revealed: true })
         }
       }
     }

@@ -1,7 +1,36 @@
-import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H, themeForLevel, type Theme } from './constants'
-import type { Game } from './game'
+import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H, themeForLevel, type Theme, type PowerupKind } from './constants'
 import type { PlayerState, EnemyState, BombState } from './types'
+import type { Particles } from './particles'
 import { ENEMY_DEFS } from './enemies'
+
+/**
+ * Structural view of the game state the renderer needs.
+ * Both the live `Game` (host/campaign) and the snapshot-driven `RemoteGame`
+ * (online client) satisfy this, so the renderer can draw either.
+ */
+export interface Renderable {
+  mode: 'campaign' | 'battle'
+  level: number
+  time: number
+  lives: number
+  score: number
+  levelTime: number
+  roundWins: [number, number]
+  grid: { t: number }[][]
+  players: any[]
+  enemies: any[]
+  bombs: any[]
+  flames: any[]
+  powerups: any[]
+  exit: { col: number; row: number; revealed: boolean }
+  state: string
+  suddenDeath: boolean
+  freezeUntil: number
+  flashColor: string
+  particles: Particles
+  getShakeOffset(): { x: number; y: number }
+  getFlashAlpha(): number
+}
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
@@ -58,7 +87,7 @@ export class Renderer {
     }
   }
 
-  draw(game: Game, t: number) {
+  draw(game: Renderable, t: number) {
     const ctx = this.ctx
     ctx.save()
     const sh = game.getShakeOffset()
@@ -239,7 +268,7 @@ export class Renderer {
     return s
   }
 
-  private drawWalls(ctx: CanvasRenderingContext2D, game: Game, th: Theme) {
+  private drawWalls(ctx: CanvasRenderingContext2D, game: Renderable, th: Theme) {
     const s = this.getWallSprites(th)
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
@@ -249,7 +278,7 @@ export class Renderer {
       }
   }
 
-  private drawExit(ctx: CanvasRenderingContext2D, game: Game, t: number) {
+  private drawExit(ctx: CanvasRenderingContext2D, game: Renderable, t: number) {
     if (!game.exit.revealed) return
     const x = game.exit.col * TILE + TILE / 2
     const y = game.exit.row * TILE + TILE / 2
@@ -276,9 +305,10 @@ export class Renderer {
     ctx.restore()
   }
 
-  private drawPowerups(ctx: CanvasRenderingContext2D, game: Game, t: number) {
+  private drawPowerups(ctx: CanvasRenderingContext2D, game: Renderable, t: number) {
     for (const u of game.powerups) {
-      const def = POWERUP_DEFS[u.kind]
+      if (!u.revealed) continue // hidden under a brick until destroyed
+      const def = POWERUP_DEFS[u.kind as PowerupKind]
       const x = u.col * TILE + TILE / 2
       const y = u.row * TILE + TILE / 2 + Math.sin(t * 3 + u.col) * 2
       ctx.save()
@@ -392,7 +422,7 @@ export class Renderer {
     return cv
   }
 
-  private drawFlames(ctx: CanvasRenderingContext2D, game: Game, t: number) {
+  private drawFlames(ctx: CanvasRenderingContext2D, game: Renderable, t: number) {
     const seen = new Set<string>()
     const angles = [0, Math.PI, Math.PI / 2, -Math.PI / 2]
     const blob = this.getFlameSprite()
@@ -424,7 +454,7 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D, p: PlayerState, t: number, game: Game) {
+  private drawPlayer(ctx: CanvasRenderingContext2D, p: PlayerState, t: number, game: Renderable) {
     const x = p.x * TILE + TILE / 2
     const y = p.y * TILE + TILE / 2
     // spawn blink

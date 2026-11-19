@@ -1,8 +1,10 @@
-import { Game } from './game'
-import { Renderer } from './render'
+import { Game, haptic } from './game'
+import { Renderer, type Renderable } from './render'
 import { ui } from './ui'
 import { input } from './input'
 import { audio } from './audio'
+import { net } from './net'
+import { serializeGame, RemoteGame, diffSnapshots } from './netgame'
 import { CANVAS_W, CANVAS_H, POWERUP_DEFS } from './constants'
 import { isHighScore } from './storage'
 import type { Dir, PowerupKind } from './constants'
@@ -17,9 +19,20 @@ let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
 let lastTickSecond = -1
 
+// ---------- online battle state ----------
+let netRole: 'none' | 'host' | 'client' = 'none'
+let remote: RemoteGame | null = null
+let prevSnap: any = null
+// host: P2 input arrives from the remote client (dir = held, bomb/detonate = edges)
+let remoteInput = { dir: null as Dir | null, bomb: false, detonate: false }
+// client: track last sent dir to only send on change
+let lastSentDir: Dir | null = null
+let snapTimer = 0
+
 // Live debug handle for browser inspection / automated testing (read-only view).
 Object.defineProperty(window, '__game', { get: () => game, configurable: true })
 Object.defineProperty(window, '__input', { get: () => input, configurable: true })
+Object.defineProperty(window, '__net', { get: () => net, configurable: true })
 
 // ---------- powerup legend (settings screen) ----------
 {
@@ -49,6 +62,39 @@ Object.defineProperty(window, '__input', { get: () => input, configurable: true 
 
 // ---------- layout ----------
 
+const dpad = document.getElementById('t-dpad')!
+const actions = document.getElementById('t-actions')!
+
+/** place the touch clusters in the black letterbox around the canvas
+ *  (side bars in landscape, bottom bar in portrait) so they never cover the game */
+function layoutTouch() {
+  const sr = stage.getBoundingClientRect()
+  const side = (window.innerWidth - sr.width) / 2
+  const bottom = (window.innerHeight - sr.height) / 2
+  const dpadW = 178, dpadH = 116, actW = 84, actH = 138
+  if (side >= dpadW + 16) {
+    // landscape: black bars on the left & right (cluster fits fully)
+    dpad.style.left = `${Math.max(8, side / 2 - dpadW / 2)}px`
+    dpad.style.top = `${Math.max(8, (window.innerHeight - dpadH) / 2)}px`
+    dpad.style.right = 'auto'
+    dpad.style.bottom = 'auto'
+    actions.style.right = `${Math.max(8, side / 2 - actW / 2)}px`
+    actions.style.top = `${Math.max(8, (window.innerHeight - actH) / 2)}px`
+    actions.style.left = 'auto'
+    actions.style.bottom = 'auto'
+  } else {
+    // portrait (or narrow): black bar below the canvas
+    dpad.style.left = '14px'
+    dpad.style.bottom = `${Math.max(8, bottom / 2 - dpadH / 2)}px`
+    dpad.style.top = 'auto'
+    dpad.style.right = 'auto'
+    actions.style.right = '14px'
+    actions.style.bottom = `${Math.max(8, bottom / 2 - actH / 2)}px`
+    actions.style.top = 'auto'
+    actions.style.left = 'auto'
+  }
+}
+
 function fit() {
   const pad = 16
   const availW = window.innerWidth - pad
@@ -60,6 +106,7 @@ function fit() {
   stage.style.height = `${h}px`
   canvas.style.width = `${w}px`
   canvas.style.height = `${h}px`
+  layoutTouch()
 }
 window.addEventListener('resize', fit)
 fit()
@@ -99,6 +146,110 @@ function startAttract() {
   audio.setTrack('menu')
 }
 
+// ---------- online battle ----------
+
+function leaveNet() {
+  net.destroy()
+  netRole = 'none'
+  remote = null
+  prevSnap = null
+  lastSentDir = null
+  remoteInput = { dir: null, bomb: false, detonate: false }
+  snapTimer = 0
+}
+
+function hostOnline() {
+  if (netRole !== 'none') return
+  net.onError = (msg) => {
+    ui.onlineStatus(msg, 'err')
+    if (!net.connected) leaveNet()
+  }
+  net.host()
+  ui.onlineStatus(`ROOM ${net.roomCode} — share the code, waiting for opponent…`)
+  net.onOpen = () => {
+    ui.onlineStatus(`OPPONENT CONNECTED — FIGHT!`, 'ok')
+    netRole = 'host'
+    game = new Game('battle', { aiPlayer2: false })
+    wireGame()
+    appState = 'playing'
+    lastTickSecond = -1
+    ui.show(null)
+    ui.banner('FIGHT!', 1.5)
+    audio.setTrack('battle')
+    audio.ensure()
+  }
+}
+
+function joinOnline() {
+  if (netRole !== 'none') return
+  const code = ui.getOnlineCode()
+  if (code.length < 4) { ui.onlineStatus('Enter the 5-letter room code first', 'err'); return }
+  ui.onlineStatus(`Joining room ${code}…`)
+  net.onError = (msg) => {
+    ui.onlineStatus(msg, 'err')
+    if (!net.connected) leaveNet()
+  }
+  net.onOpen = () => {
+    ui.onlineStatus('CONNECTED — FIGHT!', 'ok')
+    netRole = 'client'
+    remote = new RemoteGame()
+    prevSnap = null
+    game = null
+    appState = 'playing'
+    lastTickSecond = -1
+    ui.show(null)
+    ui.banner('FIGHT!', 1.5)
+    audio.setTrack('battle')
+    audio.ensure()
+  }
+  net.join(code)
+}
+
+/** host: receive the client's input; both: handle drop-offs */
+net.onMessage = (m) => {
+  if (m.t === 'input' && netRole === 'host') {
+    remoteInput.dir = m.dir as Dir | null // null = released → stop
+    if (m.bomb) remoteInput.bomb = true
+    if (m.detonate) remoteInput.detonate = true
+    return
+  }
+  if (m.t !== 'state' || netRole !== 'client' || !remote) return
+  const ev = diffSnapshots(prevSnap, m.s)
+  prevSnap = m.s
+  remote.apply(m.s)
+  // client-side juice: audio + haptics from snapshot diffs
+  if (ev.boom) { audio.play('boom'); haptic(40) }
+  if (ev.bombPlaced) audio.play('bomb')
+  if (ev.playerHit) { audio.play('hurt'); haptic(90) }
+  if (ev.powerup) audio.play('powerup')
+  if (ev.suddenDeath) { ui.banner('⚠ SUDDEN DEATH ⚠', 1.6); audio.play('combo') }
+  if (ev.roundWin === 0) { ui.banner('YOU TAKE THE ROUND!', 2); audio.play('combo') }
+  else if (ev.roundWin === 1) { ui.banner('OPPONENT TAKES THE ROUND!', 2); audio.play('combo') }
+  if (ev.battleOver) {
+    audio.play(ev.roundWin === 0 ? 'levelClear' : 'gameOver')
+    const g = remote
+    ui.showBattleOver(g.winner, [g.players[0].kills, g.players[1].kills], false, g.roundWins, ['YOU', 'OPPONENT'])
+    ui.setRematchHidden(true)
+    ui.show('battleover')
+    appState = 'title'
+  }
+}
+net.onClose = () => {
+  if (netRole === 'none') return
+  const wasPlaying = appState === 'playing'
+  if (wasPlaying) {
+    ui.banner(netRole === 'host' ? 'OPPONENT LEFT' : 'CONNECTION LOST', 2)
+    audio.play('gameOver')
+  }
+  window.setTimeout(() => {
+    if (netRole !== 'none') {
+      leaveNet()
+      if (wasPlaying) toTitle()
+      else ui.onlineStatus('Connection closed', 'err')
+    }
+  }, 1600)
+}
+
 function wireGame() {
   if (!game) return
   game.onEvent = (ev, data) => {
@@ -132,8 +283,11 @@ function wireGame() {
         if (game!.attract) {
           window.setTimeout(startAttract, 1500)
         } else {
+          const online = netRole === 'host'
           ui.showBattleOver(data.winner, [game!.players[0].kills, game!.players[1].kills], battleOpts.aiPlayer2,
-            data.roundWins as [number, number] | undefined)
+            data.roundWins as [number, number] | undefined,
+            online ? ['YOU', 'OPPONENT'] : undefined)
+          ui.setRematchHidden(online)
           ui.show('battleover')
           appState = 'title'
         }
@@ -143,6 +297,7 @@ function wireGame() {
 }
 
 function toTitle() {
+  leaveNet()
   appState = 'title'
   game = null
   startAttract()
@@ -150,6 +305,7 @@ function toTitle() {
 
 function pause() {
   if (appState !== 'playing' || !game) return
+  if (netRole === 'client') { ui.banner('CAN’T PAUSE ONLINE', 1.2); return }
   appState = 'paused'
   ui.show('pause')
   audio.setTrack('menu')
@@ -168,9 +324,14 @@ ui.onAction = (action: string) => {
     case 'battle': ui.show('battle'); ui.menuIndex = 0; break
     case 'battle-1p': startBattle(true); break
     case 'battle-2p': startBattle(false); break
+    case 'online': ui.show('online'); ui.menuIndex = 0; break
+    case 'online-host': hostOnline(); break
+    case 'online-join': joinOnline(); break
     case 'scores': ui.showScores(); ui.show('scores'); break
     case 'settings': ui.show('settings'); break
     case 'back':
+      // leaving the online screen drops any half-open room
+      if (ui.screen === 'online' && !net.connected) leaveNet()
       ui.show('title'); ui.menuIndex = 0
       audio.setTrack('menu')
       break
@@ -181,6 +342,7 @@ ui.onAction = (action: string) => {
       ui.show(null)
       break
     case 'rematch':
+      ui.setRematchHidden(false)
       startBattle(battleOpts.aiPlayer2)
       break
   }
@@ -191,7 +353,7 @@ input.onTogglePause = () => {
   else if (appState === 'paused') resume()
 }
 input.onMenuNav = (d) => {
-  if (appState === 'title' || ui.screen === 'battle' || ui.screen === 'scores' || ui.screen === 'settings') {
+  if (appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings') {
     if (ui.screen === 'pause') return
     if (ui.screen === 'over') return
     ui.menuNav(d)
@@ -235,10 +397,10 @@ window.addEventListener('pointerdown', () => audio.ensure(), { once: true })
 
 // ---------- HUD ----------
 
-function hudUpdate() {
-  if (!game || appState === 'title') { ui.hudSet(null); return }
-  const p = game.players[0]
-  const remaining = game.levelTime - game.time
+function hudUpdate(view: Renderable) {
+  if (appState === 'title') { ui.hudSet(null); return }
+  const p = view.players[0]
+  const remaining = view.levelTime - view.time
   // urgency tick under 30s (once per second)
   const sec = Math.max(0, Math.ceil(remaining))
   if (remaining < 30 && sec !== lastTickSecond) {
@@ -246,21 +408,21 @@ function hudUpdate() {
     audio.play('tick')
   }
   let playerHtml = ''
-  if (game.mode === 'campaign') {
-    const hearts = '❤'.repeat(Math.max(0, game.lives))
+  if (view.mode === 'campaign') {
+    const hearts = '❤'.repeat(Math.max(0, view.lives))
     playerHtml = `<span style="color:#ff5252">${hearts}</span>
       <span class="pips">${pips(p.bombs, 8, 'bombs')}</span>
       <span class="pips">${pips(p.flame, 8, 'flame')}</span>
       <span class="pips">${pips(Math.round((p.speed - 4.2) / 0.9) + 1, 5, 'spd')}</span>`
   } else {
-    const p2 = game.players[1]
+    const p2 = view.players[1]
     const rp = (n: number) => (n >= 2 ? '●●' : n === 1 ? '●○' : '○○')
-    playerHtml = `<span style="color:#00e5ff">P1 ${rp(game.roundWins[0])} ⚔${p.kills}</span>
-      <span style="color:#ff2e88">P2 ${rp(game.roundWins[1])} ⚔${p2?.kills ?? 0}</span>`
+    playerHtml = `<span style="color:#00e5ff">P1 ${rp(view.roundWins[0])} ⚔${p.kills}</span>
+      <span style="color:#ff2e88">P2 ${rp(view.roundWins[1])} ⚔${p2?.kills ?? 0}</span>`
   }
   ui.hudSet({
-    score: game.mode === 'campaign' ? game.score : game.players[0].kills * 1000 + game.players[1].kills * 1000,
-    level: game.mode === 'campaign' ? game.level : 0,
+    score: view.mode === 'campaign' ? view.score : view.players[0].kills * 1000 + view.players[1].kills * 1000,
+    level: view.mode === 'campaign' ? view.level : 0,
     timer: remaining,
     timerDanger: remaining < 30,
     playerHtml,
@@ -287,18 +449,42 @@ function loop(now: number) {
   if (dt > 0.25) dt = 0.25
 
   // menu keyboard mode
-  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'scores' || ui.screen === 'settings'
+  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings'
   input.inMenu = inMenu && !ui.screen?.startsWith('over')
 
   if (game && appState !== 'paused') {
     acc += dt
     while (acc >= STEP) {
       const inputs = input.poll()
-      // AI players in attract/battle
-      game.update(STEP, { p1: inputs.p1, p2: inputs.p2 })
+      // host: P2 is the remote opponent (dir held, bomb/detonate are one-shot edges)
+      const p2 = netRole === 'host'
+        ? { dir: remoteInput.dir, bomb: remoteInput.bomb, detonate: remoteInput.detonate }
+        : inputs.p2
+      game.update(STEP, { p1: inputs.p1, p2 })
+      if (netRole === 'host') { remoteInput.bomb = false; remoteInput.detonate = false }
       acc -= STEP
     }
+    // host: broadcast snapshots ~20Hz
+    if (netRole === 'host') {
+      snapTimer += dt
+      if (snapTimer >= 0.05) {
+        snapTimer = 0
+        net.send({ t: 'state', s: serializeGame(game) })
+      }
+    }
     audio.suddenDeath = game.suddenDeath
+  } else if (remote && appState === 'playing') {
+    // online client: no local simulation — animate particles, forward input
+    remote.particles.update(dt)
+    audio.suddenDeath = remote.suddenDeath
+    const inputs = input.poll()
+    if (inputs.p1.dir !== lastSentDir) {
+      lastSentDir = inputs.p1.dir
+      net.send({ t: 'input', dir: inputs.p1.dir, bomb: false, detonate: false })
+    }
+    if (inputs.p1.bomb) net.send({ t: 'input', dir: lastSentDir, bomb: true, detonate: false })
+    if (inputs.p1.detonate) net.send({ t: 'input', dir: lastSentDir, bomb: false, detonate: true })
+    acc = 0
   } else {
     input.poll() // consume so keys don't stick
   }
@@ -321,7 +507,10 @@ function loop(now: number) {
 
   if (game) {
     renderer.draw(game, now / 1000)
-    hudUpdate()
+    hudUpdate(game)
+  } else if (remote) {
+    renderer.draw(remote, now / 1000)
+    hudUpdate(remote)
   }
   frame++
 }
@@ -331,7 +520,8 @@ ui.init()
 startAttract()
 
 // auto-pause when the tab loses focus (prevents losing a life in the background)
-const autoPause = () => { if (appState === 'playing') pause() }
+// online clients can't pause — the host keeps simulating
+const autoPause = () => { if (appState === 'playing' && netRole !== 'client') pause() }
 window.addEventListener('blur', autoPause)
 document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause() })
 
