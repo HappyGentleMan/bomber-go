@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, late · **State: battle AI rewrite (0efb2d1), all tests green, ready to push**
+**Last updated:** Nov 19, late · **State: battle AI aggression round, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,68 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## Battle AI aggression: survivability-based bombing (this round)
+
+Player feedback: the AI "is good at evading me but not placing bombs and
+fighting back". Researched how people build Bomberman AIs (Pommerman,
+arXiv 2203.09608 — `is_survivable` is a bounded BFS that schedules bomb
+explosions in time; "if at least one action kills an enemy, prune all
+others"; GameDev SE — pick the bomb spot, walk there, bomb, walk to the hide
+spot, re-plan on every new bomb; baines/bomberman-ai — bomb when the enemy
+is in range OR a good spot has a reachable safe tile outside the blast).
+
+Measured root cause (`test/aggr.ts`, two AIs, 150s): **bombs/min 0.0 and
+0.8, kills 1/0**. The old `blastEscape` gate treated every blast as a
+*permanent wall* — ~80% of bomb attempts rejected (18,824 rejections in
+150s); in a 1-wide corridor a flame-1 blast covers the whole segment, so
+the bot could never bomb there and only ever evaded.
+
+The fix:
+
+- **`survivalRoute(p, placing?)`** — time-aware BFS over (tile, step), the
+  Pommerman idea: a fire schedule built from current flames plus every live
+  bomb's blast during `[E, E+1]` (`E = ceil(fuse / 240ms)`), 14-step
+  horizon (3.36s > the 2.6s fuse). A safe haven is a tile no flame ever
+  covers in the horizon; the route may *cross* blast tiles (the flame is
+  scheduled, not a wall). The enemy's tile is never an exit. `placing=true`
+  (placement tick only) schedules the about-to-be-placed bomb on p's tile.
+- **Bomb decision priority** — kill bomb (on line + clear lane + distance
+  ≤ flame) → lane-opener (brick between us within flame range) → cut (brick
+  behind the enemy) → map-break (distance 2..flame+1, 85% jitter breaks
+  symmetry). The old trap rule is subsumed by the kill bomb.
+- **Commit the survival route when a bomb is placed** — the old wall-based
+  `escapeRoute` pointed at the nearest *non-blast* tile, which in a
+  corridor is the enemy's own tile (the bot walked into the enemy, got
+  pinned, and burned in its own blast).
+- **Repath suppression** — no pursuit re-path while any own bomb is live,
+  including the *pending* one on the placement tick (the bomb is not in
+  `this.bombs` until `update` runs, so the old guards were blind to it and
+  the re-path routed through the about-to-exist blast).
+- `blastEscape` removed; the brick-on-path bomb gate uses `canSurviveBomb`.
+
+Two bugs caught by measurement (`test/death.ts` death-cause trace with
+`aiState` plant logging): (1) the placement-tick blind spot above — the
+bot re-pathed into its own not-yet-registered blast; (2) **phantom-bomb
+poisoning** — re-evaluating `survivalRoute` after the bot moved scheduled a
+phantom bomb at its *current* tile, making that tile unstandable, so every
+re-plan from a box straddling two tiles picked the opposite neighbour and
+the bot ping-ponged across the blast ring in a 0.33s cycle until the flame
+landed. Both fixed and verified.
+
+**Results (headless):**
+
+- aggression (150s, two AIs): bombs/min 0.0/0.8 → **24.4/50.8**, kills
+  1/0 → **5/2**
+- twitch (8×60s vs a no-op player): **0 deaths**, 72 90° turns/min,
+  8 U-turns/min (the intermediate aggressive build died 6/min before these
+  fixes; target band 20–100 turns/min)
+- death probe: 8 consecutive clean 120s runs
+- smoke suite (38 checks) + production build green
+
+Harnesses: `test/aggr.ts` (bomb rate + gate rejections), `test/death.ts`
+(death trace + route-plant log), `test/besc.ts` (survivability rejection
+dump), plus the existing `twitch.ts` / `probe.ts`.
 
 ## Battle AI rewrite: purposeful movement, no suicide (this round, commit 0efb2d1)
 
@@ -246,7 +308,7 @@ In a real Terminal:
 zsh /Users/anson/.local/share/opencode/gh-setup.sh
 ```
 
-That creates the `HappyGentleMan/bomber-go` repo and pushes (54 commits).
+That creates the `HappyGentleMan/bomber-go` repo and pushes (58 commits).
 See `PUSH_TO_GITHUB.md` for details / manual steps.
 
 ## Play

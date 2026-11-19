@@ -1127,18 +1127,40 @@ export class Game {
     if (enemy) {
       const distEnemy = Math.abs(enemy.col - p.col) + Math.abs(enemy.row - p.row)
       const inLine = enemy.col === p.col || enemy.row === p.row
-      const canBomb = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)
-      // trap: opponent hemmed into a dead-end on our line — bomb to cut the exit
-      if (inLine && distEnemy >= 1 && distEnemy <= p.flame
-        && this.openNeighbors(enemy.col, enemy.row) <= 1 && canBomb) {
+      const sdc = Math.sign(enemy.col - p.col), sdr = Math.sign(enemy.row - p.row)
+      // clear lane: the blast is a cross, so a wall or brick between us
+      // stops it short — a kill only lands if the lane is clear. A brick
+      // within flame range is worth bombing: it opens the lane
+      let los = false, laneBrick = false
+      if (inLine && distEnemy >= 1) {
+        los = true
+        for (let i = 1; i < distEnemy; i++) {
+          const t = this.tile(p.col + sdc * i, p.row + sdr * i)
+          if (t !== T_WALK) {
+            los = false
+            if (t === T_SOFT && i <= p.flame) laneBrick = true
+            break
+          }
+        }
+      }
+      const canBomb = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.canSurviveBomb(p)
+      // 1. kill bomb: the blast reaches the enemy's tile right now. They
+      //    have 2.6s to leave the cross; boxed in, they can't. (The old
+      //    rules missed this outright — the jitter rule started at
+      //    distance 2 and the trap rule demanded a dead end, so a lined-up
+      //    bot in open space rarely bombed)
+      if (inLine && los && distEnemy <= p.flame && canBomb) {
         out.bomb = true
-      } else if (distEnemy >= 2 && distEnemy <= p.flame + 1 && canBomb
-        && Math.random() < 0.85) { // reaction jitter: break perfect symmetry
+      } else if (inLine && laneBrick && canBomb) {
+        // 2. open the lane: blast the brick between us — next tick the
+        //    kill bomb can land
         out.bomb = true
       } else if (inLine && distEnemy >= 1 && distEnemy <= p.flame - 1 && canBomb) {
-        // cut: blast a brick behind the opponent to shrink their escape routes
-        const sdc = Math.sign(enemy.col - p.col), sdr = Math.sign(enemy.row - p.row)
+        // 3. cut: blast a brick behind the opponent to shrink their escape routes
         if (this.tile(enemy.col + sdc, enemy.row + sdr) === T_SOFT) out.bomb = true
+      } else if (distEnemy >= 2 && distEnemy <= p.flame + 1 && canBomb
+        && Math.random() < 0.85) { // 4. map-break with reaction jitter: break perfect symmetry
+        out.bomb = true
       }
       if (myBombs.length) {
         const b = myBombs.sort((a, b) => a.born - b.born)[0]
@@ -1147,7 +1169,7 @@ export class Game {
       }
     } else if (nearest) {
       // campaign: bomb any enemy lined up within flame range
-      if (!this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)) {
+      if (!this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.canSurviveBomb(p)) {
         for (const e of this.enemies) {
           if (!e.alive) continue
           const dc = e.col - p.col, dr = e.row - p.row
@@ -1255,7 +1277,22 @@ export class Game {
             detouring = false
             target = { c: enemy.col, r: enemy.row }
           } else if (inLine) {
-            target = { c: p.col, r: p.row }
+            // on the line but out of flame reach: close to the nearest kill
+            // position (flame tiles from the enemy, on our side of the line).
+            // Holding here sat the bot at the end of the line forever — with
+            // flame 1 the only kill is at distance 1, so it must walk in.
+            // The target is anchored on the enemy, so it tracks the enemy
+            // without flip-flopping at a tile boundary
+            const dc = Math.sign(p.col - enemy.col), dr = Math.sign(p.row - enemy.row)
+            const tc = enemy.col + dc * Math.min(p.flame, Math.abs(p.col - enemy.col))
+            const tr = enemy.row + dr * Math.min(p.flame, Math.abs(p.row - enemy.row))
+            // a wall or live blast on the kill position: hold the line
+            // instead of pinning against an unreachable tile
+            if (this.tile(tc, tr) === T_HARD || allBlasts.has(key(tc, tr))) {
+              target = { c: p.col, r: p.row }
+            } else {
+              target = { c: tc, r: tr }
+            }
           } else {
             const lu = this.lineupTarget(p, enemy, allBlasts, st?.noBricks, st?.triedLineup)
             const det = lu ?? this.detourTarget(p, st, allBlasts, 8)
@@ -1308,7 +1345,7 @@ export class Game {
       const h = st.path[st.i]
       if (this.tile(h.x, h.y) === T_SOFT
         && (h.x - p.x) ** 2 + (h.y - p.y) ** 2 < 2.25
-        && !this.blastEscape(p)) {
+        && !this.canSurviveBomb(p)) {
         const noBricks = new Set(st.noBricks)
         noBricks.add(key(h.x, h.y))
         this.aiState.set(p.id, { ...st, path: [], i: 0, noBricks })
@@ -1326,7 +1363,16 @@ export class Game {
     for (const k of st2.noBricks) {
       if (this.tile(k % COLS, Math.floor(k / COLS)) === T_SOFT) avoid.add(k)
     }
-    if (!inOwnBlast && (forceReplan || !st || this.time > st2.repath || drift > 2 || offPath || !this.pathValid(st2, avoid))) {
+    // while one of our OWN bombs is still live, no repath to pursuit: the
+    // box may have geometrically left the blast set already, but the flame
+    // is still scheduled to land, and the pursuit target is often on the
+    // far side of that blast — repathing there walked the bot back through
+    // the blast just as the flame landed (the corridor deaths). out.bomb
+    // counts too: on the placement tick the bomb is not in this.bombs yet
+    // (tryPlaceBomb runs after aiThink), so ownBombLive is blind to it and
+    // the repath routed straight through the about-to-exist blast
+    const ownBombLive = myBombs.length > 0 || out.bomb
+    if (!ownBombLive && !inOwnBlast && (forceReplan || !st || this.time > st2.repath || drift > 2 || offPath || !this.pathValid(st2, avoid))) {
       const path = this.bfs(p.col, p.row, target.c, target.r, true, avoid) ?? []
       // a standoff target BFS can't reach is a dead end: remember it so the
       // next pick falls to the next fallback (line-up → detour → hold)
@@ -1370,7 +1416,7 @@ export class Game {
       }
       const dir = nd ?? this.steer(p, h.x, h.y)
       const isBrick = this.tile(h.x, h.y) === T_SOFT
-      const canBombNow = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.blastEscape(p)
+      const canBombNow = !this.bombAt(p.col, p.row) && myBombs.length < p.bombs && this.canSurviveBomb(p)
       if (isBrick && canBombNow) {
         // brick on the path: bomb it (own-tile bomb burns adjacent bricks)
         out.bomb = true
@@ -1416,10 +1462,14 @@ export class Game {
       }
       s.repath = Math.min(s.repath, enemy ? this.time + 0.2 : this.time + 0.4)
     }
-    // if we're about to bomb, pre-plan the way out of the blast so the
-    // pursuit path can't lead us back into our own flame
+    // if we're about to bomb, commit the time-aware escape route (the
+    // Pommerman survivability path — it may cross blast tiles, the flame
+    // lands 2.6s out and the bot is through long before). The old wall-based
+    // escapeRoute pointed at the nearest NON-blast tile — in a 1-wide
+    // corridor that was the enemy's own tile, and the bot walked into the
+    // enemy, got pinned, and burned in its own blast
     if (out.bomb) {
-      const route = this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
+      const route = this.survivalRoute(p, true) ?? this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
       if (route) this.aiState.set(p.id, { path: route, i: 0, repath: this.time + 0.9, tc: route[route.length - 1].x, tr: route[route.length - 1].y, noBricks: this.aiState.get(p.id)?.noBricks ?? new Set(), kind: 'escape', standoff, detouring, triedLineup: this.aiState.get(p.id)?.triedLineup })
     }
     // stall detection: commanded a direction but made no progress for ~0.3s
@@ -1702,7 +1752,9 @@ export class Game {
     if (inSoon) {
       const kept = followCommitted(soon)
       if (kept !== null) return kept
-      const route = this.escapeRoute(p, soon)
+      // time-aware first (it threads a blast before the flame lands and
+      // knows the enemy's tile is not an exit), wall-based as last resort
+      const route = this.survivalRoute(p) ?? this.escapeRoute(p, soon)
       if (route) return follow(route)
       // only the forward tile is threatened: back off
       const back = ((p.dir + 2) % 4) as Dir
@@ -1715,7 +1767,7 @@ export class Game {
     if (inAll) {
       const kept = followCommitted(all)
       if (kept !== null) return kept
-      const route = this.escapeRoute(p, all)
+      const route = this.survivalRoute(p) ?? this.escapeRoute(p, all)
       if (route) return follow(route)
     }
     // nearby enemy: flee only from uncontrolled approaches. An enemy in a
@@ -1814,12 +1866,117 @@ export class Game {
     return n
   }
 
-  /** true if, after placing a bomb on p's tile, p can physically get out:
-   *  a route to a tile outside the blast of at most 3 tiles (the AI follows
-   *  the escape route immediately — longer routes lose the race to the fuse
-   *  when the pursuit path pulls back into the blast) */
-  private blastEscape(p: PlayerState): boolean {
-    const route = this.escapeRoute(p, this.blastSet(p.col, p.row, p.flame))
-    return route !== null && route.length <= 3
+  /** time-aware survivability (the Pommerman "is_survivable" idea): after
+   *  placing a bomb on p's tile, the route by which p reaches a tile that
+   *  no flame will ever cover, given the fuses of every live bomb — or
+   *  null. The old gate (blastEscape) treated every blast as a permanent
+   *  wall — in a 1-wide corridor a flame-1 blast covers the whole corridor
+   *  segment, so the bot could NEVER bomb there and only ever evaded. In
+   *  reality the fuse is 2.6s (≈11 tiles at 4.2 t/s) and the flame lasts
+   *  only 0.48s (≈2 steps): walk through before it lands, or after it dies.
+   *  Assumption (as in the literature): opponents place no new bombs
+   *  during the horizon. The route may cross blast tiles — that is the
+   *  whole point (the flame is scheduled, not a wall). `placing` marks the
+   *  placement-tick call (canSurviveBomb / the bomb hook), where a bomb is
+   *  about to appear on p's tile: it is scheduled as a phantom. Re-evaluation
+   *  calls (threatDir, after the bot has moved) must NOT add the phantom —
+   *  the real bomb is already in this.bombs with its true fuse, and a
+   *  phantom at p's CURRENT tile made that tile unstandable, so every
+   *  re-plan from a straddling box picked the opposite neighbour and the
+   *  bot ping-ponged across the blast ring until the flame landed */
+  private survivalRoute(p: PlayerState, placing: boolean = false): { x: number; y: number }[] | null {
+    const STEP = 240 // ms per tile at PLAYER_BASE_SPEED
+    const HORIZON = 14
+    // which tiles are on fire at each step: current flames (from now until
+    // their ttl) plus every live bomb's blast during [E, E+1], where
+    // E = ceil(fuse/STEP)
+    const fireAt: Set<number>[] = []
+    for (let s = 0; s <= HORIZON; s++) fireAt.push(new Set<number>())
+    const addFire = (k: number, s0: number, s1: number) => {
+      for (let s = Math.max(0, s0); s <= Math.min(HORIZON, s1); s++) fireAt[s].add(k)
+    }
+    for (const f of this.flames) {
+      addFire(key(f.col, f.row), 0, Math.ceil((f.ttl * 1000) / STEP))
+    }
+    const scheduleBlast = (c: number, r: number, pow: number, fuseMs: number) => {
+      const E = Math.ceil(fuseMs / STEP)
+      if (E > HORIZON) return
+      for (const k of this.blastSet(c, r, pow)) addFire(k, E, E + 1)
+    }
+    for (const b of this.bombs) scheduleBlast(b.col, b.row, b.power, b.fuse)
+    // the hypothetical bomb — placement tick only (see the method doc)
+    if (placing && !this.bombAt(p.col, p.row)) scheduleBlast(p.col, p.row, p.flame, BOMB_FUSE)
+    // a tile is a safe haven if nothing ever burns it in the horizon and
+    // no bomb sits on it (a bomb's blast would)
+    const everFire = new Set<number>()
+    for (const s of fireAt) for (const k of s) everFire.add(k)
+    const bombTiles = new Set<number>(this.bombs.map(b => key(b.col, b.row)))
+    if (placing && !this.bombAt(p.col, p.row)) bombTiles.add(key(p.col, p.row))
+    // the enemy stands in the way: players block each other, and an escape
+    // route that threads through the enemy's tile is no route at all (the
+    // death that taught us: bomb in a 1-wide corridor, enemy parked above,
+    // the bot fled into the enemy and burned in its own blast)
+    const foe = this.players.find(q => q.id !== p.id && q.alive)
+    const walk = (c: number, r: number): boolean =>
+      c >= 1 && r >= 1 && c < COLS - 1 && r < ROWS - 1
+      && this.tile(c, r) !== T_HARD
+      && (this.tile(c, r) !== T_SOFT || (p.wallpassUntil ?? 0) > this.time)
+      && !(foe && foe.col === c && foe.row === r)
+    const safe = (k: number): boolean =>
+      !everFire.has(k) && !bombTiles.has(k)
+      && walk(k % COLS, Math.floor(k / COLS))
+    // BFS over (tile, step); the box may straddle two tiles, so start from
+    // every tile it overlaps. The start tile is the bomb tile — on fire at
+    // step E — so it is never a haven; the bot must leave by then
+    const seen = new Set<number>()
+    const prev = new Map<number, number>()
+    const q: number[] = []
+    for (const k of this.boxTiles(p)) {
+      if (fireAt[0].has(k)) continue // already burning: the threat override owns this
+      seen.add(k * 100)
+      q.push(k * 100)
+    }
+    let qi = 0, found = -1
+    while (qi < q.length && found < 0) {
+      const st = q[qi++]
+      const s = st % 100, k = Math.floor(st / 100)
+      if (s >= HORIZON) continue
+      const c = k % COLS, r = Math.floor(k / COLS), ns = s + 1
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]]) {
+        const nc = c + dc, nr = r + dr
+        if (!walk(nc, nr)) continue
+        const nk = key(nc, nr)
+        if (fireAt[ns].has(nk)) continue
+        if (ns >= 1 && bombTiles.has(nk)) continue // can't stand on a bomb
+        const st2 = nk * 100 + ns
+        if (seen.has(st2)) continue
+        seen.add(st2)
+        prev.set(st2, st)
+        if (safe(nk)) { found = st2; break }
+        q.push(st2)
+      }
+    }
+    if (found < 0) return null
+    // reconstruct the spatial path (drop consecutive repeats from waits,
+    // and the start tile)
+    const path: { x: number; y: number }[] = []
+    let st = found
+    const tiles: number[] = []
+    while (st >= 0) {
+      tiles.push(Math.floor(st / 100))
+      st = prev.get(st) ?? -1
+    }
+    tiles.reverse()
+    for (let i = 1; i < tiles.length; i++) {
+      if (tiles[i] === tiles[i - 1]) continue
+      path.push({ x: tiles[i] % COLS, y: Math.floor(tiles[i] / COLS) })
+    }
+    return path.length ? path : null
+  }
+
+  /** true if, after placing a bomb on p's tile, p can survive every live
+   *  fuse (see survivalRoute) */
+  private canSurviveBomb(p: PlayerState): boolean {
+    return this.survivalRoute(p, true) !== null
   }
 }

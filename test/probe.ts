@@ -52,7 +52,7 @@ function dump(tag: string) {
   console.log('flames:', g.flames.map((f: any) => f.col + ',' + f.row).join(' ') || 'none')
   console.log('imminent:', [...g['imminentSet']()].map(key2).join(' ') || 'empty')
   console.log('canStep RLDU:', [0, 1, 2, 3].map(q => (g['canStep'](p2, q) ? 'Y' : 'N')).join(''))
-  console.log('blastEscape:', g['blastEscape'](p2))
+  console.log('canSurviveBomb:', g['canSurviveBomb'](p2))
   console.log('bombs:', g.bombs.map((b: any) => `${b.owner}@${b.col},${b.row}/f${Math.round(b.fuse)}/p${b.power}`).join(' '))
   const st = g.aiState.get(1)
   console.log('st:', st ? `i${st.i}/${st.path.length} kind=${st.kind} path=[${st.path.map((w: any) => w.x + ',' + w.y).join(' ')}] nb=[${[...st.noBricks].map(key2).join(' ')}]` : 'null')
