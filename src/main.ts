@@ -17,6 +17,10 @@ let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
 let lastTickSecond = -1
 
+// Live debug handle for browser inspection / automated testing (read-only view).
+Object.defineProperty(window, '__game', { get: () => game, configurable: true })
+Object.defineProperty(window, '__input', { get: () => input, configurable: true })
+
 // ---------- powerup legend (settings screen) ----------
 {
   const PU_DESC: Record<PowerupKind, string> = {

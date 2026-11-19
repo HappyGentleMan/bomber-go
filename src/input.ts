@@ -112,7 +112,14 @@ class InputManager {
     if (g2?.buttons[0]?.pressed) this.p2.bomb = true
     if (g2?.buttons[2]?.pressed) this.p2.detonate = true
 
-    const out = { p1: this.p1, p2: this.p2 }
+    // Return COPIES of the edge-triggered flags — `this.p1`/`this.p2` are the
+    // live state we clear right after. Returning references (the old bug) meant
+    // bomb/detonate were reset to false before game.update() could read them, so
+    // bombs could never be placed.
+    const out = {
+      p1: { dir: dir1, bomb: this.p1.bomb, detonate: this.p1.detonate },
+      p2: { dir: dir2, bomb: this.p2.bomb, detonate: this.p2.detonate },
+    }
     this.p1.dir = dir1
     this.p2.dir = dir2
     this.p1.bomb = false

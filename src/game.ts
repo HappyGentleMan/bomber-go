@@ -269,7 +269,10 @@ export class Game {
         continue
       }
       const inp = inputs[p.id] ?? { dir: null, bomb: false, detonate: false }
-      if (inp.dir !== null) p.movingDir = inp.dir
+      // Only buffer a direction while idle. Setting it every frame while already
+      // moving left it stale after the tile completed, so a single tap would walk
+      // TWO tiles (the buffered dir re-triggered the next step).
+      if (inp.dir !== null && !p.moving) p.movingDir = inp.dir
       if (inp.bomb) this.tryPlaceBomb(p)
       if (inp.detonate) {
         const oldest = this.bombs.filter(b => b.owner === p.id).sort((a, b) => a.born - b.born)[0]
