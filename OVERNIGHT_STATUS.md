@@ -1,6 +1,6 @@
 # Bomber Go — Overnight Status
 
-**Last updated:** Nov 19, ~9:40 AM · **State: online mode + hidden items in, all tests green, ready to push**
+**Last updated:** Nov 19, ~11:30 AM · **State: HD/smooth pass in, all tests green, ready to push**
 
 ## What got done overnight
 
@@ -68,6 +68,33 @@ npx tsx test/soak.ts      # 10-min soak
 npm run build             # production build
 npm run preview -- --port 4173   # then open http://localhost:4173
 ```
+
+## HD + smoothness pass (latest, ready to commit)
+
+- **Native-resolution canvas** — the canvas backing store now matches the
+  displayed size × devicePixelRatio (`Renderer.resize`, wired into `fit()`), so
+  all vector art (players, enemies, flames, text) renders at true display
+  resolution. No more CSS upscale blur; `image-rendering: pixelated` removed.
+- **2× pre-rendered sprites** — floor, walls, bombs, flames, powerups (per kind),
+  player bodies (per color) and the vignette are all pre-rendered at 2× and
+  drawn with smoothing, so edges are anti-aliased and crisp. Per-frame gradient
+  cost is gone (powerups/bodies are cached canvases).
+- **Render interpolation** — the 60 Hz simulation now snapshots each entity's
+  previous position (`prevX/prevY`) and the renderer lerps between ticks using
+  the frame accumulator, so motion is smooth on 120/144 Hz displays and free of
+  per-tick stepping. Teleports (respawn/round) snap instead of ghosting.
+- **Online client interpolation** — `RemoteGame` lerps between 20 Hz host
+  snapshots (`tickInterp` + `prevX/prevY`), so remote play is as smooth as local.
+- **HD UI** — animated gradient title, glass panels (backdrop blur), glowing
+  selection bar on buttons, light sheen sweep, staggered overlay entrances,
+  animated stage glow, HUD readability scrim.
+
+### In-app browser CSS quirks (worked around)
+This embedded Chromium (1) doesn't stretch `::before/::after` with `inset: 0`
+(need explicit `width/height: 100%`), and (2) drops `transform: translateX(% )`
+when the element box is percentage-sized. The button sheen now animates
+`background-position` instead of `transform`. Full WebRTC/P2P still can't run
+in-app (zero ICE candidates) — test online in a real browser.
 
 ## Online battle + hidden items (this round, commit 124425e)
 

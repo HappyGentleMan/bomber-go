@@ -51,14 +51,31 @@ function shade(hex: string, amt: number): string {
   return `rgb(${r},${g},${b})`
 }
 
+/** lerp between a previous and current position; snap on teleports (respawn/round) */
+function lerpPos(p: { x: number; y: number; prevX?: number; prevY?: number }, alpha: number): { x: number; y: number } {
+  const px = p.prevX ?? p.x, py = p.prevY ?? p.y
+  const dx = p.x - px, dy = p.y - py
+  if (dx * dx + dy * dy > 2.25) return { x: p.x, y: p.y } // jumped > 1.5 tiles: no ghosting
+  return { x: px + dx * alpha, y: py + dy * alpha }
+}
+
 export class Renderer {
-  ctx: CanvasRenderingContext2D
+  ctx!: CanvasRenderingContext2D
   canvas: HTMLCanvasElement
+  dpr: number
+  /** canvas transform scale: device pixels per logical (720×624) pixel */
+  scale = 1
+  /** offscreen sprites are pre-rendered at this scale (HD, no per-frame gradients) */
+  private static SS = 2
   /** static floor pre-rendered per theme (big perf win vs per-frame fillRects) */
   private floorCache = new Map<string, HTMLCanvasElement>()
   /** pre-rendered flame sprites (gradients are expensive per-frame) */
   private flameSprite: HTMLCanvasElement | null = null
   private flameArmSprite: HTMLCanvasElement | null = null
+  /** pre-rendered powerup sprites per kind (glow + capsule + glyph) */
+  private powerupCache = new Map<string, HTMLCanvasElement>()
+  /** pre-rendered player bodies per color (gradient body + helmet) */
+  private playerBodyCache = new Map<string, HTMLCanvasElement>()
   /** pre-rendered cinematic vignette (subtle dark corners, always on) */
   private vignetteSprite: HTMLCanvasElement | null = null
   /** ambient dust motes drifting over the floor (cheap, adds life) */
@@ -66,14 +83,8 @@ export class Renderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
-    canvas.width = CANVAS_W
-    canvas.height = CANVAS_H
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    canvas.width = CANVAS_W * dpr
-    canvas.height = CANVAS_H * dpr
-    this.ctx = canvas.getContext('2d')!
-    this.ctx.scale(dpr, dpr)
-    this.ctx.imageSmoothingEnabled = false
+    this.dpr = Math.min(2, window.devicePixelRatio || 1)
+    this.resize(CANVAS_W, CANVAS_H)
     // seed ambient dust motes
     for (let i = 0; i < 14; i++) {
       this.motes.push({
@@ -87,7 +98,18 @@ export class Renderer {
     }
   }
 
-  draw(game: Renderable, t: number) {
+  /** re-size the backing store to the displayed size × dpr (native-res rendering) */
+  resize(wCss: number, hCss: number) {
+    this.canvas.width = Math.max(1, Math.round(wCss * this.dpr))
+    this.canvas.height = Math.max(1, Math.round(hCss * this.dpr))
+    this.scale = this.canvas.width / CANVAS_W
+    const ctx = this.canvas.getContext('2d')!
+    this.ctx = ctx
+    ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0)
+    ctx.imageSmoothingEnabled = true
+  }
+
+  draw(game: Renderable, t: number, alpha = 1) {
     const ctx = this.ctx
     ctx.save()
     const sh = game.getShakeOffset()
@@ -102,8 +124,8 @@ export class Renderer {
     game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
     for (const b of game.bombs) this.drawBomb(ctx, b, t)
-    for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t, game.time)
-    for (const p of game.players) if (p.alive) this.drawPlayer(ctx, p, t, game)
+    for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t, game.time, alpha)
+    for (const p of game.players) if (p.alive) this.drawPlayer(ctx, p, t, game, alpha)
     game.particles.draw(ctx)
 
     // freeze overlay
@@ -122,9 +144,11 @@ export class Renderer {
     }
     // always-on cinematic vignette (focus + depth)
     if (!this.vignetteSprite) {
+      const S = Renderer.SS
       const cv = document.createElement('canvas')
-      cv.width = CANVAS_W; cv.height = CANVAS_H
+      cv.width = CANVAS_W * S; cv.height = CANVAS_H * S
       const c = cv.getContext('2d')!
+      c.scale(S, S)
       const g = c.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.42, CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.72)
       g.addColorStop(0, 'rgba(0,0,0,0)')
       g.addColorStop(0.75, 'rgba(0,0,10,0.10)')
@@ -139,7 +163,7 @@ export class Renderer {
       c.fillRect(0, 0, CANVAS_W, 90)
       this.vignetteSprite = cv
     }
-    ctx.drawImage(this.vignetteSprite, 0, 0)
+    ctx.drawImage(this.vignetteSprite, 0, 0, CANVAS_W, CANVAS_H)
     // full-screen flash (big combos / level clear)
     const fa = game.getFlashAlpha()
     if (fa > 0) {
@@ -152,10 +176,12 @@ export class Renderer {
   private getFloor(th: Theme): HTMLCanvasElement {
     let cv = this.floorCache.get(th.floor)
     if (cv) return cv
+    const S = Renderer.SS
     cv = document.createElement('canvas')
-    cv.width = CANVAS_W
-    cv.height = CANVAS_H
+    cv.width = CANVAS_W * S
+    cv.height = CANVAS_H * S
     const c = cv.getContext('2d')!
+    c.scale(S, S)
     c.fillStyle = th.floor
     c.fillRect(0, 0, CANVAS_W, CANVAS_H)
     for (let r = 0; r < ROWS; r++)
@@ -189,7 +215,7 @@ export class Renderer {
   }
 
   private drawFloor(ctx: CanvasRenderingContext2D, th: Theme) {
-    ctx.drawImage(this.getFloor(th), 0, 0)
+    ctx.drawImage(this.getFloor(th), 0, 0, CANVAS_W, CANVAS_H)
   }
 
   /** slow-drifting, twinkling dust motes just above the floor */
@@ -219,13 +245,16 @@ export class Renderer {
   private getWallSprites(th: Theme) {
     let s = this.wallCache.get(th.floor + th.brickFill)
     if (s) return s
+    const S = Renderer.SS
     const make = () => {
       const cv = document.createElement('canvas')
-      cv.width = TILE; cv.height = TILE
-      return cv
+      cv.width = TILE * S; cv.height = TILE * S
+      const g = cv.getContext('2d')!
+      g.scale(S, S)
+      return g
     }
-    const hard = make(), soft = make()
-    const h = hard.getContext('2d')!, b = soft.getContext('2d')!
+    const h = make(), b = make()
+    const hard = h.canvas, soft = b.canvas
     const T = TILE
     // hard wall
     // drop shadow (raised-block depth)
@@ -273,8 +302,8 @@ export class Renderer {
     for (let r = 0; r < ROWS; r++)
       for (let c = 0; c < COLS; c++) {
         const tile = game.grid[r][c].t
-        if (tile === T_HARD) ctx.drawImage(s.hard, c * TILE, r * TILE)
-        else if (tile === T_SOFT) ctx.drawImage(s.soft, c * TILE, r * TILE)
+        if (tile === T_HARD) ctx.drawImage(s.hard, c * TILE, r * TILE, TILE, TILE)
+        else if (tile === T_SOFT) ctx.drawImage(s.soft, c * TILE, r * TILE, TILE, TILE)
       }
   }
 
@@ -305,37 +334,50 @@ export class Renderer {
     ctx.restore()
   }
 
+  /** pre-rendered powerup sprite per kind (glow + capsule + glyph), 2× res */
+  private getPowerupSprite(kind: PowerupKind): HTMLCanvasElement {
+    let cv = this.powerupCache.get(kind)
+    if (cv) return cv
+    const def = POWERUP_DEFS[kind]
+    const S = Renderer.SS
+    cv = document.createElement('canvas')
+    cv.width = 48 * S; cv.height = 48 * S
+    const c = cv.getContext('2d')!
+    c.scale(S, S)
+    c.translate(24, 24)
+    // glow
+    const g = c.createRadialGradient(0, 0, 2, 0, 0, 20)
+    g.addColorStop(0, def.color + 'aa')
+    g.addColorStop(1, def.color + '00')
+    c.fillStyle = g
+    c.beginPath(); c.arc(0, 0, 20, 0, Math.PI * 2); c.fill()
+    // capsule
+    c.fillStyle = '#0d1322'
+    roundRect(c, -13, -13, 26, 26, 8)
+    c.fill()
+    c.strokeStyle = def.color
+    c.lineWidth = 2
+    roundRect(c, -13, -13, 26, 26, 8)
+    c.stroke()
+    c.fillStyle = def.color
+    c.font = '900 13px "Avenir Next", system-ui, sans-serif'
+    c.textAlign = 'center'
+    c.textBaseline = 'middle'
+    c.fillText(def.glyph, 0, 1)
+    this.powerupCache.set(kind, cv)
+    return cv
+  }
+
   private drawPowerups(ctx: CanvasRenderingContext2D, game: Renderable, t: number) {
     for (const u of game.powerups) {
       if (!u.revealed) continue // hidden under a brick until destroyed
-      const def = POWERUP_DEFS[u.kind as PowerupKind]
       const x = u.col * TILE + TILE / 2
       const y = u.row * TILE + TILE / 2 + Math.sin(t * 3 + u.col) * 2
-      ctx.save()
-      ctx.translate(x, y)
       // ground shadow (floats above it)
       ctx.fillStyle = 'rgba(0,0,0,0.30)'
-      ctx.beginPath(); ctx.ellipse(0, 14 - Math.sin(t * 3 + u.col) * 2, 10, 3.5, 0, 0, Math.PI * 2); ctx.fill()
-      // glow
-      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 20)
-      g.addColorStop(0, def.color + 'aa')
-      g.addColorStop(1, def.color + '00')
-      ctx.fillStyle = g
-      ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill()
-      // capsule
-      ctx.fillStyle = '#0d1322'
-      roundRect(ctx, -13, -13, 26, 26, 8)
-      ctx.fill()
-      ctx.strokeStyle = def.color
-      ctx.lineWidth = 2
-      roundRect(ctx, -13, -13, 26, 26, 8)
-      ctx.stroke()
-      ctx.fillStyle = def.color
-      ctx.font = '900 13px "Avenir Next", system-ui, sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(def.glyph, 0, 1)
-      ctx.restore()
+      ctx.beginPath(); ctx.ellipse(x, u.row * TILE + TILE / 2 + 14 - Math.sin(t * 3 + u.col) * 2, 10, 3.5, 0, 0, Math.PI * 2); ctx.fill()
+      // sprite (pre-rendered glow + capsule + glyph)
+      ctx.drawImage(this.getPowerupSprite(u.kind as PowerupKind), x - 24, y - 24, 48, 48)
     }
   }
 
@@ -344,9 +386,11 @@ export class Renderer {
 
   private getBombSprite(): HTMLCanvasElement {
     if (this.bombSprite) return this.bombSprite
+    const S = Renderer.SS
     const cv = document.createElement('canvas')
-    cv.width = 40; cv.height = 40
+    cv.width = 40 * S; cv.height = 40 * S
     const c = cv.getContext('2d')!
+    c.scale(S, S)
     const g = c.createRadialGradient(16, 15, 2, 20, 20, 15)
     g.addColorStop(0, '#4a5568')
     g.addColorStop(0.5, '#1a202c')
@@ -390,9 +434,11 @@ export class Renderer {
 
   private getFlameSprite(): HTMLCanvasElement {
     if (this.flameSprite) return this.flameSprite
+    const S = Renderer.SS
     const cv = document.createElement('canvas')
-    cv.width = 128; cv.height = 128
+    cv.width = 128 * S; cv.height = 128 * S
     const c = cv.getContext('2d')!
+    c.scale(S, S)
     const g = c.createRadialGradient(64, 64, 1, 64, 64, 64)
     g.addColorStop(0, 'rgba(255,255,230,0.98)')
     g.addColorStop(0.4, 'rgba(255,190,60,0.92)')
@@ -408,9 +454,11 @@ export class Renderer {
 
   private getFlameArmSprite(): HTMLCanvasElement {
     if (this.flameArmSprite) return this.flameArmSprite
+    const S = Renderer.SS
     const cv = document.createElement('canvas')
-    cv.width = 128; cv.height = 128
+    cv.width = 128 * S; cv.height = 128 * S
     const c = cv.getContext('2d')!
+    c.scale(S, S)
     // arm starts at centre (64,64), points +x
     const g = c.createLinearGradient(64, 0, 157, 0)
     g.addColorStop(0, 'rgba(255,200,90,0.9)')
@@ -454,9 +502,38 @@ export class Renderer {
     }
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D, p: PlayerState, t: number, game: Renderable) {
-    const x = p.x * TILE + TILE / 2
-    const y = p.y * TILE + TILE / 2
+  /** pre-rendered player body per color (gradient body + helmet), 2× res */
+  private getPlayerBody(color: string): HTMLCanvasElement {
+    let cv = this.playerBodyCache.get(color)
+    if (cv) return cv
+    const S = Renderer.SS
+    cv = document.createElement('canvas')
+    cv.width = 32 * S; cv.height = 32 * S
+    const c = cv.getContext('2d')!
+    c.scale(S, S)
+    c.translate(16, 16)
+    // body (vertical gradient for a rounded, lit look)
+    const bodyG = c.createLinearGradient(0, -12, 0, 14)
+    bodyG.addColorStop(0, '#ffffff')
+    bodyG.addColorStop(0.25, color)
+    bodyG.addColorStop(1, shade(color, -40))
+    c.fillStyle = bodyG
+    roundRect(c, -13, -12, 26, 26, 9)
+    c.fill()
+    // helmet top
+    c.fillStyle = 'rgba(255,255,255,0.94)'
+    roundRect(c, -13, -14, 26, 14, 9)
+    c.fill()
+    c.fillStyle = color
+    c.fillRect(-13, -4, 26, 4)
+    this.playerBodyCache.set(color, cv)
+    return cv
+  }
+
+  private drawPlayer(ctx: CanvasRenderingContext2D, p: PlayerState, t: number, game: Renderable, alpha: number) {
+    const pos = lerpPos(p, alpha)
+    const x = pos.x * TILE + TILE / 2
+    const y = pos.y * TILE + TILE / 2
     // spawn blink
     if (p.invincibleUntil > game.time && Math.sin(t * 20) > 0) return
     ctx.save()
@@ -486,21 +563,8 @@ export class Renderer {
     // wallpass ghost
     if (p.wallpassUntil > game.time) ctx.globalAlpha = 0.65
 
-    const bodyC = p.color
-    // body (vertical gradient for a rounded, lit look)
-    const bodyG = ctx.createLinearGradient(0, -12, 0, 14)
-    bodyG.addColorStop(0, '#ffffff')
-    bodyG.addColorStop(0.25, bodyC)
-    bodyG.addColorStop(1, shade(bodyC, -40))
-    ctx.fillStyle = bodyG
-    roundRect(ctx, -13, -12, 26, 26, 9)
-    ctx.fill()
-    // helmet top
-    ctx.fillStyle = 'rgba(255,255,255,0.94)'
-    roundRect(ctx, -13, -14, 26, 14, 9)
-    ctx.fill()
-    ctx.fillStyle = bodyC
-    ctx.fillRect(-13, -4, 26, 4)
+    // body (pre-rendered 2× sprite: gradient body + helmet)
+    ctx.drawImage(this.getPlayerBody(p.color), -16, -16, 32, 32)
     // eyes
     const [dc, dr] = [[1, 0], [-1, 0], [0, 1], [0, -1]][p.dir]
     const ex = dc * 3, ey = dr * 2
@@ -519,10 +583,11 @@ export class Renderer {
     ctx.restore()
   }
 
-  private drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, t: number, gt: number) {
+  private drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyState, t: number, gt: number, alpha: number) {
     const def = ENEMY_DEFS[e.type]
-    const x = e.x * TILE + TILE / 2
-    const y = e.y * TILE + TILE / 2
+    const pos = lerpPos(e, alpha)
+    const x = pos.x * TILE + TILE / 2
+    const y = pos.y * TILE + TILE / 2
     ctx.save()
     ctx.translate(x, y)
     // spawn pop-in

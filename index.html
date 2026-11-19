@@ -34,7 +34,12 @@
       border-radius: 14px;
       overflow: hidden;
     }
-    #game { display: block; image-rendering: pixelated; }
+    #game { display: block; }
+    @keyframes stageglow {
+      0%, 100% { box-shadow: 0 0 80px rgba(0,229,255,.18), 0 0 24px rgba(0,229,255,.10), 0 24px 70px rgba(0,0,0,.65); }
+      50% { box-shadow: 0 0 110px rgba(0,229,255,.30), 0 0 36px rgba(0,229,255,.16), 0 24px 70px rgba(0,0,0,.65); }
+    }
+    #stage { animation: stageglow 4.5s ease-in-out infinite; }
     .overlay {
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -46,25 +51,53 @@
       padding: 20px;
     }
     .hidden { display: none !important; }
+    /* staggered entrance for overlay content */
+    .overlay > * { animation: fadeup .45s cubic-bezier(.2,1.2,.4,1) both; }
+    .overlay > *:nth-child(2) { animation-delay: .05s; }
+    .overlay > *:nth-child(3) { animation-delay: .10s; }
+    .overlay > *:nth-child(4) { animation-delay: .15s; }
+    .overlay > *:nth-child(5) { animation-delay: .20s; }
+    .overlay > *:nth-child(6) { animation-delay: .25s; }
+    @keyframes fadeup { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
     .logo {
-      font-size: clamp(34px, 7vw, 64px);
-      font-weight: 900; letter-spacing: .08em;
-      background: linear-gradient(180deg, #fff 20%, var(--neon) 60%, var(--pink));
+      font-size: clamp(34px, 7vw, 68px);
+      font-weight: 900; letter-spacing: .1em;
+      background: linear-gradient(180deg, #fff 15%, var(--neon) 55%, var(--pink) 90%, var(--neon));
+      background-size: 100% 220%;
       -webkit-background-clip: text; background-clip: text; color: transparent;
       filter: drop-shadow(0 0 18px rgba(0,229,255,.45));
       text-align: center; line-height: 1.05;
+      animation: logoshift 5s ease-in-out infinite;
     }
+    @keyframes logoshift { 0%, 100% { background-position: 0 0; } 50% { background-position: 0 100%; } }
     .logo small { display: block; font-size: .32em; letter-spacing: .55em; color: var(--text); -webkit-text-fill-color: var(--text); opacity: .7; margin-top: 8px; font-weight: 600; }
     .btn {
+      position: relative; overflow: hidden;
       appearance: none; border: 2px solid rgba(0,229,255,.35);
       background: linear-gradient(180deg, rgba(0,229,255,.12), rgba(255,46,136,.10));
       color: var(--text);
       font: inherit; font-weight: 700; letter-spacing: .12em;
       font-size: clamp(14px, 2.2vw, 18px);
-      padding: 12px 34px; border-radius: 10px; cursor: pointer;
+      padding: 12px 34px; border-radius: 12px; cursor: pointer;
       min-width: 260px; text-align: center;
-      transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
+      transition: transform .12s cubic-bezier(.2,1.4,.4,1), box-shadow .15s ease, border-color .15s ease;
     }
+    /* light sheen sweep on hover / selected (background-position: no transform, works everywhere) */
+    .btn::after {
+      content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.18) 50%, transparent 60%) no-repeat;
+      background-size: 260% 100%;
+      background-position: 180% 0;
+      transition: background-position .55s ease;
+    }
+    .btn:hover::after, .btn.sel::after { background-position: -80% 0; }
+    /* keyboard/click selection: glowing accent bar */
+    .btn.sel::before {
+      content: ''; position: absolute; left: -2px; top: 18%; bottom: 18%; width: 4px;
+      border-radius: 4px; background: var(--neon); box-shadow: 0 0 12px var(--neon);
+    }
+    .btn.primary.sel::before { background: var(--gold); box-shadow: 0 0 12px var(--gold); }
     .btn:hover, .btn.sel {
       border-color: var(--neon);
       box-shadow: 0 0 22px rgba(0,229,255,.35), inset 0 0 14px rgba(0,229,255,.12);
@@ -75,9 +108,11 @@
     .btn.primary:hover, .btn.primary.sel { box-shadow: 0 0 22px rgba(255,213,74,.4); border-color: var(--gold); }
     .menu { display: flex; flex-direction: column; gap: 12px; align-items: center; }
     .panel {
-      background: var(--panel); border: 1px solid rgba(0,229,255,.2);
-      border-radius: 12px; padding: 18px 26px; text-align: center;
-      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+      background: linear-gradient(180deg, rgba(18,26,46,.92), rgba(12,18,34,.86));
+      border: 1px solid rgba(0,229,255,.25);
+      border-radius: 16px; padding: 18px 26px; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
     }
     .panel h2 { font-size: clamp(20px, 3.4vw, 30px); letter-spacing: .1em; margin-bottom: 10px; }
     .panel .big { font-size: clamp(26px, 4vw, 40px); font-weight: 900; color: var(--gold); }
@@ -111,6 +146,7 @@
       padding: 10px 12px;
       pointer-events: none;
       font-variant-numeric: tabular-nums;
+      background: linear-gradient(180deg, rgba(6,9,18,.55), rgba(6,9,18,0));
     }
     #hud .stat {
       display: flex; align-items: center; gap: 8px;
@@ -142,7 +178,7 @@
       0%, 100% { filter: drop-shadow(0 0 18px rgba(0,229,255,.45)); }
       50% { filter: drop-shadow(0 0 30px rgba(0,229,255,.8)); }
     }
-    #ui-title .logo { animation: logopulse 2.6s ease-in-out infinite; }
+    #ui-title .logo { animation: logopulse 2.6s ease-in-out infinite, logoshift 5s ease-in-out infinite; }
     @keyframes hsglow {
       0%, 100% { text-shadow: 0 0 8px var(--gold), 0 0 18px rgba(255,213,74,.5); }
       50% { text-shadow: 0 0 16px var(--gold), 0 0 34px rgba(255,213,74,.9); }

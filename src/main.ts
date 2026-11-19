@@ -106,6 +106,7 @@ function fit() {
   stage.style.height = `${h}px`
   canvas.style.width = `${w}px`
   canvas.style.height = `${h}px`
+  renderer.resize(w, h) // native-resolution backing store (HD, no CSS upscale blur)
   layoutTouch()
 }
 window.addEventListener('resize', fit)
@@ -476,6 +477,7 @@ function loop(now: number) {
   } else if (remote && appState === 'playing') {
     // online client: no local simulation — animate particles, forward input
     remote.particles.update(dt)
+    remote.tickInterp(dt)
     audio.suddenDeath = remote.suddenDeath
     const inputs = input.poll()
     if (inputs.p1.dir !== lastSentDir) {
@@ -506,10 +508,11 @@ function loop(now: number) {
   }
 
   if (game) {
-    renderer.draw(game, now / 1000)
+    // render interpolation: draw between the last two 60 Hz simulation ticks
+    renderer.draw(game, now / 1000, appState === 'paused' ? 1 : Math.min(1, acc / STEP))
     hudUpdate(game)
   } else if (remote) {
-    renderer.draw(remote, now / 1000)
+    renderer.draw(remote, now / 1000, remote.alpha)
     hudUpdate(remote)
   }
   frame++
@@ -547,7 +550,7 @@ else if (start === 'flame') {
   for (let r = 4; r <= 8; r++) for (let c = 5; c <= 9; c++) dbg.grid[r][c].t = 0
   dbg.bombs.push({ id: dbg.bombId++, owner: 0, col: 7, row: 6, fuse: 120, power: 4, born: 0 })
   dbg.enemies.push({
-    id: 999, type: 'balloom', col: 10, row: 6, x: 10, y: 6,
+    id: 999, type: 'balloom', col: 10, row: 6, x: 10, y: 6, prevX: 10, prevY: 6,
     dir: 1, moving: false, movingDir: null, moveTimer: 0, aiTimer: 0,
     hp: 1, alive: true, frozen: true, deadAt: 0, born: 0, seed: 0.5,
   })

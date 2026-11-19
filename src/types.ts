@@ -24,6 +24,7 @@ export interface PlayerState {
   isAI: boolean
   col: number; row: number
   x: number; y: number       // pixel centre
+  prevX: number; prevY: number // previous tick (render interpolation)
   dir: Dir
   moving: boolean
   movingDir: Dir | null      // buffered direction
@@ -72,6 +73,7 @@ export interface EnemyState {
   type: EnemyType
   col: number; row: number
   x: number; y: number
+  prevX: number; prevY: number // previous tick (render interpolation)
   dir: Dir
   moving: boolean
   movingDir: Dir | null

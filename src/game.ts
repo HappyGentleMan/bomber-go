@@ -131,6 +131,7 @@ export class Game {
       id, isAI,
       col, row,
       x: col, y: row,
+      prevX: col, prevY: row,
       dir: 0, moving: false, movingDir: null,
       speed: PLAYER_BASE_SPEED,
       bombs: 1, flame: 1,
@@ -159,6 +160,7 @@ export class Game {
       this.enemies.push({
         id: nid(), type: def.type,
         col: s.col, row: s.row, x: s.col, y: s.row,
+        prevX: s.col, prevY: s.row,
         dir: Math.floor(Math.random() * 4) as Dir,
         moving: false, movingDir: null,
         moveTimer: 0, aiTimer: Math.random() * 2,
@@ -954,6 +956,9 @@ export class Game {
     // input for players
     const ins = this.players.map(p =>
       p.isAI ? this.aiThink(p) : (p.id === 0 ? inputs.p1 : inputs.p2))
+    // snapshot positions for render interpolation (renderer lerps prev→cur)
+    for (const p of this.players) { p.prevX = p.x; p.prevY = p.y }
+    for (const e of this.enemies) { e.prevX = e.x; e.prevY = e.y }
     this.updatePlayers(gdt, ins)
 
     this.updateEnemies(gdt)

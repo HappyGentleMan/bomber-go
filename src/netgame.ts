@@ -81,11 +81,28 @@ export class RemoteGame {
 
   private shakeOff = { x: 0, y: 0 }
 
+  /** interpolation factor between the two most recent snapshots (0 = new, 1 = caught up) */
+  alpha = 1
+  /** average snapshot interval, used to advance alpha (host sends ~20 Hz) */
+  private snapInterval = 0.05
+
   getShakeOffset() { return this.shakeOff }
   getFlashAlpha() { return this.flashAlpha }
 
+  /** advance interpolation toward (and slightly past) the latest snapshot */
+  tickInterp(dt: number) {
+    this.alpha = Math.min(1.25, this.alpha + dt / this.snapInterval)
+  }
+
   apply(s: any) {
     if (!s) return
+    // remember old positions so the renderer can lerp between snapshots
+    const oldP = this.players, oldE = this.enemies
+    const prevOf = (o: any, x: number, y: number): [number, number] => {
+      if (!o) return [x, y]
+      const dx = x - o.x, dy = y - o.y
+      return dx * dx + dy * dy > 2.25 ? [x, y] : [o.x, o.y] // teleport: snap
+    }
     this.grid = (s.grid as number[][]).map(row => row.map(t => ({ t })))
     this.state = s.state
     this.time = s.time
@@ -101,33 +118,41 @@ export class RemoteGame {
     this.flashAlpha = s.flash[1]
     this.shakeOff = s.shake
     this.exit = { col: s.exit[0], row: s.exit[1], revealed: !!s.exit[2] }
-    this.players = s.players.map((p: any[], i: number) => ({
-      id: i,
-      x: p[0], y: p[1], col: Math.round(p[0]), row: Math.round(p[1]),
-      dir: p[2] as Dir, moving: !!p[3], alive: !!p[4],
-      speed: p[7],
-      bombs: p[5], flame: p[6],
-      shieldUntil: p[8], invincibleUntil: p[9],
-      wallpassUntil: p[10], kickUntil: p[11], frozenUntil: p[12],
-      kills: p[13], respawnIn: p[14],
-      movingDir: null, stepTimer: 0,
-      color: i === 0 ? '#00e5ff' : '#ff2e88',
-    }))
+    this.players = s.players.map((p: any[], i: number) => {
+      const [px, py] = prevOf(oldP[i], p[0], p[1])
+      return {
+        id: i,
+        x: p[0], y: p[1], prevX: px, prevY: py, col: Math.round(p[0]), row: Math.round(p[1]),
+        dir: p[2] as Dir, moving: !!p[3], alive: !!p[4],
+        speed: p[7],
+        bombs: p[5], flame: p[6],
+        shieldUntil: p[8], invincibleUntil: p[9],
+        wallpassUntil: p[10], kickUntil: p[11], frozenUntil: p[12],
+        kills: p[13], respawnIn: p[14],
+        movingDir: null, stepTimer: 0,
+        color: i === 0 ? '#00e5ff' : '#ff2e88',
+      }
+    })
     this.bombs = s.bombs.map((b: any[]) => ({ col: b[0], row: b[1], fuse: b[2], power: b[3], owner: b[4] }))
     this.flames = s.flames.map((f: any[]) => ({ col: f[0], row: f[1], dir: f[2], ttl: f[3], seed: f[4] }))
     this.powerups = s.powerups.map((u: any[]) => ({ col: u[0], row: u[1], kind: u[2] as PowerupKind, born: 0, revealed: !!u[3] }))
-    this.enemies = s.enemies.map((e: any[]) => ({
-      type: e[0], x: e[1], y: e[2], dir: e[3], alive: !!e[4],
-      frozen: !!e[5], born: e[6], seed: e[7],
-      col: Math.round(e[1]), row: Math.round(e[2]),
-      moving: false, movingDir: null, aiTimer: 0, moveTimer: 0, hp: 1, deadAt: 0,
-    }))
+    this.enemies = s.enemies.map((e: any[], i: number) => {
+      const [px, py] = prevOf(oldE[i], e[1], e[2])
+      return {
+        type: e[0], x: e[1], y: e[2], prevX: px, prevY: py, dir: e[3], alive: !!e[4],
+        frozen: !!e[5], born: e[6], seed: e[7],
+        col: Math.round(e[1]), row: Math.round(e[2]),
+        moving: false, movingDir: null, aiTimer: 0, moveTimer: 0, hp: 1, deadAt: 0,
+      }
+    })
     // particles: inject (renderer draws them; local update advances)
     this.particles.list = s.particles.map((p: any[]) => ({
       x: p[0], y: p[1], vx: p[2], vy: p[3],
       life: p[4], maxLife: p[5], size: p[6],
       color: p[7], kind: p[8], grav: p[9], text: p[10] || undefined,
     }))
+    // start interpolating from the previous snapshot toward this one
+    this.alpha = 0
   }
 }
 
