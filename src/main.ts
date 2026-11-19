@@ -46,7 +46,6 @@ Object.defineProperty(window, '__net', { get: () => net, configurable: true })
     invincible: 'untouchable for a while',
     wallpass: 'walk through bricks',
     freeze: 'freezes enemies — battle: stuns the rival',
-    kick: 'kick bombs further',
     life: '+1 life',
   }
   const legend = document.getElementById('powerup-legend')

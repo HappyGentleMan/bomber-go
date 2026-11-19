@@ -34,7 +34,6 @@ export interface PlayerState {
   shieldUntil: number
   invincibleUntil: number
   wallpassUntil: number
-  kickUntil: number
   frozenUntil: number
   alive: boolean
   respawnIn: number

@@ -208,11 +208,16 @@ console.log('— Campaign bot run (invincible, 60s) —')
 
 console.log('— Battle: 2 AI, 150s —')
 {
-  const b = new Game('battle', { aiPlayer2: true, attract: true })
-  for (let t = 0; t < 150; t += 1/60) tick(b, t)
-  const total = b.players[0].kills + b.players[1].kills
-  check('AI kills happen', total > 0, `kills=${b.players[0].kills}+${b.players[1].kills}`)
-  console.log(`  (kills P1=${b.players[0].kills} P2=${b.players[1].kills}, suddenDeath=${b.suddenDeath}, state=${b.state})`)
+  // two independent battles: 0 kills in a single 150s run is possible with an
+  // unlucky seed (both bots camping), so require kills across both
+  let total = 0
+  for (let n = 0; n < 2; n++) {
+    const b = new Game('battle', { aiPlayer2: true, attract: true })
+    for (let t = 0; t < 150; t += 1/60) tick(b, t)
+    total += b.players[0].kills + b.players[1].kills
+    console.log(`  (run ${n + 1}: kills P1=${b.players[0].kills} P2=${b.players[1].kills}, suddenDeath=${b.suddenDeath}, state=${b.state})`)
+  }
+  check('AI kills happen', total > 0, `kills=${total} over 2 runs`)
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`)

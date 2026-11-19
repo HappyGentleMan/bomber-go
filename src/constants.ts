@@ -44,7 +44,6 @@ export const SHIELD_DURATION = 10_000
 export const INVINCIBLE_DURATION = 8_000
 export const WALLPASS_DURATION = 10_000
 export const FREEZE_DURATION = 5_000
-export const KICK_DURATION = 8_000
 
 export const MAX_BOMBS = 8
 export const MAX_FLAME = 8
@@ -80,7 +79,7 @@ export type Dir = 0 | 1 | 2 | 3 // right, left, down, up
 
 export const POWERUP_KINDS = [
   'bomb', 'flame', 'speed', 'shrink', 'shrinkf',
-  'shield', 'invincible', 'wallpass', 'freeze', 'kick', 'life',
+  'shield', 'invincible', 'wallpass', 'freeze', 'life',
 ] as const
 export type PowerupKind = (typeof POWERUP_KINDS)[number]
 
@@ -102,6 +101,5 @@ export const POWERUP_DEFS: Record<PowerupKind, PowerupDef> = {
   invincible: { kind: 'invincible', color: '#ffd54a', glyph: '★', label: 'INVINCIBLE',     weight: 7 },
   wallpass:   { kind: 'wallpass',   color: '#f48fb1', glyph: '⊘', label: 'WALL PASS',      weight: 6 },
   freeze:     { kind: 'freeze',     color: '#80deea', glyph: '❄', label: 'FREEZE',         weight: 5 },
-  kick:       { kind: 'kick',       color: '#ffab91', glyph: 'K', label: 'KICK',           weight: 4 },
   life:       { kind: 'life',       color: '#fff176', glyph: '♥', label: 'EXTRA LIFE',     weight: 2 },
 }

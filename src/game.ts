@@ -2,7 +2,7 @@ import {
   COLS, ROWS, T_WALK, T_HARD, T_SOFT, DIRS,
   PLAYER_BASE_SPEED, PLAYER_SPEED_STEP, PLAYER_MAX_SPEED_LEVELS,
   BOMB_FUSE, BOMB_FUSE_MIN, FLAME_DURATION, SPAWN_INVULN,
-  SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION, KICK_DURATION,
+  SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION,
   MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME, BATTLE_ROUND_TARGET,
   POWERUP_DEFS, POWERUP_KINDS, POWERUP_DROP_CHANCE, MAX_POWERUPS_ON_FIELD,
   ENEMY_SPEED_SCALE,
@@ -135,7 +135,7 @@ export class Game {
       dir: 0, moving: false, movingDir: null,
       speed: PLAYER_BASE_SPEED,
       bombs: 1, flame: 1,
-      shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0, kickUntil: KICK_DURATION / 1000,
+      shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0,
       frozenUntil: 0,
       alive: true, respawnIn: 0, stepTimer: 0,
       score: 0, kills: 0,
@@ -191,7 +191,7 @@ export class Game {
     p.col = 1; p.row = 1; p.x = 1; p.y = 1
     p.moving = false; p.movingDir = null
     p.invincibleUntil = this.time + SPAWN_INVULN / 1000
-    p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = KICK_DURATION / 1000
+    p.shieldUntil = 0; p.wallpassUntil = 0
     p.frozenUntil = 0
     this.state = 'playing'
     this.particles.clear()
@@ -403,10 +403,9 @@ export class Game {
     e.moving = !blocked
   }
 
-  /** KICK powerup: bumping into a bomb sends it sliding across the stage
-   *  until it hits a wall, brick, bomb or player (classic Bomb Kick). */
+  /** KICK is a permanent ability: bumping into a bomb sends it sliding
+   *  across the stage until it hits a wall, brick, bomb, enemy or player. */
   private tryKickForward(p: PlayerState) {
-    if (p.kickUntil <= this.time) return
     const [dc, dr] = dirVec(p.dir)
     // tile being pushed into: the one directly ahead of the player's centre
     // tile (the box stops ~0.06 short of the bomb tile, so probing from the
@@ -438,7 +437,7 @@ export class Game {
     if (p.invincibleUntil > this.time && cause === 'enemy') return
     p.alive = false
     // lose timed powerups on death
-    p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
+    p.shieldUntil = 0; p.wallpassUntil = 0
     const cx = p.x * 48 + 24, cy = p.y * 48 + 24
     this.particles.burst(cx, cy, p.color, 26, 220)
     this.particles.burst(cx, cy, '#ffffff', 12, 140)
@@ -479,7 +478,7 @@ export class Game {
     p.col = s.col; p.row = s.row; p.x = s.col; p.y = s.row
     p.moving = false; p.movingDir = null; p.dir = 0
     p.invincibleUntil = this.time + SPAWN_INVULN / 1000
-    p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = 0
+    p.shieldUntil = 0; p.wallpassUntil = 0
     audio.play('spawn')
   }
 
@@ -519,7 +518,6 @@ export class Game {
         this.particles.text(cx, cy, 'FREEZE!', '#80deea')
         audio.play('freeze')
         break
-      case 'kick': p.kickUntil = this.time + KICK_DURATION / 1000; this.particles.text(cx, cy, 'KICK', '#ffab91'); break
       case 'life': this.lives++; this.particles.text(cx, cy, 'EXTRA LIFE!', '#fff176'); break
     }
     this.emit('powerup', { kind: u.kind, player: p.id })
@@ -763,8 +761,8 @@ export class Game {
     for (const b of this.bombs.filter(b => b.fuse <= 0)) this.detonate(b)
   }
 
-  /** Kicked bombs slide until they collide with a wall, brick, bomb or player
-   *  (classic Bomb Kick). They plough through enemies on the way. */
+  /** Kicked bombs slide until they collide with a wall, brick, bomb,
+   *  enemy or player (classic Bomb Kick). */
   private updateBombSlides(dt: number) {
     const SPEED = 11 // tiles/second
     for (const b of this.bombs) {
@@ -778,6 +776,7 @@ export class Game {
         const blocked =
           t === T_HARD || t === T_SOFT ||
           this.bombAt(aheadC, aheadR) !== undefined ||
+          this.enemyAt(aheadC, aheadR) !== undefined ||
           this.players.some(pl => pl.alive && Math.round(pl.x) === aheadC && Math.round(pl.y) === aheadR)
         if (blocked) {
           // stop flush against the obstacle: snap back to the current tile
@@ -791,9 +790,6 @@ export class Game {
         b.x += dc * adv; b.y += dr * adv
         step -= adv
         b.col = Math.round(b.x); b.row = Math.round(b.y)
-        // plough through enemies (Super Bomberman: a kicked bomb squashes them)
-        const e = this.enemies.find(e => e.alive && Math.round(e.x) === b.col && Math.round(e.y) === b.row)
-        if (e) this.killEnemy(e, b.owner >= 0 ? this.players[b.owner] : null, true)
       }
     }
   }
@@ -946,7 +942,7 @@ export class Game {
       p.col = s.col; p.row = s.row; p.x = s.col; p.y = s.row
       p.moving = false; p.movingDir = null; p.dir = 0
       p.invincibleUntil = this.time + SPAWN_INVULN / 1000
-      p.shieldUntil = 0; p.wallpassUntil = 0; p.kickUntil = KICK_DURATION / 1000
+      p.shieldUntil = 0; p.wallpassUntil = 0
       p.frozenUntil = 0
       p.respawnIn = 0
     }
