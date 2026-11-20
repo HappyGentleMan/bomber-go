@@ -103,6 +103,25 @@ export class Net {
     try { this.conn.send(m) } catch {}
   }
 
+  /** which ICE path the data channel is on: 'host' (direct: LAN/tailnet),
+   *  'srflx' (via STUN), 'relay' (via TURN) — null until a pair is selected */
+  async pathType(): Promise<string | null> {
+    const pc = (this.conn as any)?.peerConnection as RTCPeerConnection | null
+    if (!pc) return null
+    try {
+      const stats = await pc.getStats()
+      let pair: any = null
+      stats.forEach((s: any) => {
+        if (s.type === 'candidate-pair' && (s.selected || s.nominated)) pair = s
+      })
+      if (!pair) return null
+      const cand = stats.get(pair.localCandidateId)
+      return cand?.candidateType ?? null
+    } catch {
+      return null
+    }
+  }
+
   destroy() {
     try { this.send({ t: 'bye' }) } catch {}
     try { this.conn?.close() } catch {}

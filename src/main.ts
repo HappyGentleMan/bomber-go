@@ -165,6 +165,19 @@ function leaveNet() {
   snapTimer = 0
 }
 
+/** show which path the WebRTC link is on (confirm tailnet direct-connect works) */
+function showPathBanner() {
+  window.setTimeout(() => {
+    net.pathType().then((t) => {
+      if (t === 'host') ui.banner('直連 (tailnet / LAN)', 1.6)
+      else if (t === 'srflx') ui.banner('STUN 直連', 1.6)
+      else if (t === 'relay') ui.banner('TURN relay', 1.6)
+    })
+  }, 3000)
+}
+
+let hostWaitHint: number | null = null
+
 function hostOnline() {
   if (netRole !== 'none') return
   net.onError = (msg) => {
@@ -173,7 +186,13 @@ function hostOnline() {
   }
   net.host()
   ui.onlineStatus(`ROOM ${net.roomCode} — share the code, waiting for opponent…`)
+  // nobody joined after 25s: most likely cross-network without a working relay
+  hostWaitHint = window.setTimeout(() => {
+    if (netRole === 'none')
+      ui.onlineStatus(`ROOM ${net.roomCode} — 等緊人… 朋友連唔到? 两边 iPhone 装 Tailscale 并 join 同一個 tailnet 就最稳`, 'err')
+  }, 25000)
   net.onOpen = () => {
+    if (hostWaitHint !== null) { window.clearTimeout(hostWaitHint); hostWaitHint = null }
     ui.onlineStatus(`OPPONENT CONNECTED — FIGHT!`, 'ok')
     netRole = 'host'
     game = new Game('battle', { aiPlayer2: false })
@@ -182,6 +201,7 @@ function hostOnline() {
     lastTickSecond = -1
     ui.show(null)
     ui.banner('FIGHT!', 1.5)
+    showPathBanner()
     audio.setTrack('battle')
     audio.ensure()
   }
