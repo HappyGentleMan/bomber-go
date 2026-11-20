@@ -25,6 +25,25 @@ export function genRoomCode(): string {
 
 const PEER_PREFIX = 'bomberggo-'
 
+/**
+ * ICE servers for the WebRTC data channel.
+ *  - STUN: lets both phones discover their public address (works when at least
+ *    one side is not behind a symmetric NAT).
+ *  - TURN: self-hosted relay (coturn on Anson's always-on Mac) as the fallback
+ *    when the two phones are on different networks and a direct/srflx path
+ *    can't be established. UDP only.
+ */
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    {
+      urls: 'turn:119.247.94.77:3478?transport=udp',
+      username: 'bomberggo',
+      credential: '50b42fd03733a21c51c8de0af13e206f',
+    },
+  ],
+}
+
 export class Net {
   peer: Peer | null = null
   conn: DataConnection | null = null
@@ -43,7 +62,7 @@ export class Net {
     this.isHost = true
     this.roomCode = genRoomCode()
     const code = this.roomCode
-    this.peer = new Peer(PEER_PREFIX + code)
+    this.peer = new Peer(PEER_PREFIX + code, { config: ICE_CONFIG })
     this.peer.on('connection', (conn) => {
       // accept the first opponent only
       if (this.conn) { try { conn.close() } catch {} return }
@@ -61,7 +80,7 @@ export class Net {
     this.destroy()
     this.isHost = false
     this.roomCode = code.toUpperCase()
-    this.peer = new Peer()
+    this.peer = new Peer({ config: ICE_CONFIG })
     this.peer.on('open', () => {
       const conn = this.peer!.connect(PEER_PREFIX + this.roomCode, { reliable: true })
       this.wire(conn)
