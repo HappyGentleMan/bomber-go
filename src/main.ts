@@ -186,10 +186,11 @@ function hostOnline() {
   }
   net.host()
   ui.onlineStatus(`ROOM ${net.roomCode} — share the code, waiting for opponent…`)
-  // nobody joined after 25s: most likely cross-network without a working relay
+  // nobody joined after 25s: most likely cross-network without a working relay,
+  // or iOS Safari WebRTC quirks (private relay / carrier NAT / iOS 26 Safari regression)
   hostWaitHint = window.setTimeout(() => {
     if (netRole === 'none')
-      ui.onlineStatus(`ROOM ${net.roomCode} — 等緊人… 朋友連唔到? 两边 iPhone 装 Tailscale 并 join 同一個 tailnet 就最稳`, 'err')
+      ui.onlineStatus(`ROOM ${net.roomCode} — 等緊人… 朋友連唔到? 試: ①換 Chrome 開呢頁 ②關 iCloud Private Relay (設定 > 名 > iCloud) ③設定 > 流動數據 > 關「限制IP地址追蹤」 ④先試同一個WiFi`, 'err')
   }, 25000)
   net.onOpen = () => {
     if (hostWaitHint !== null) { window.clearTimeout(hostWaitHint); hostWaitHint = null }
