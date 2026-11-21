@@ -535,6 +535,9 @@ function loop(now: number) {
   last = now
   if (dt > 0.25) dt = 0.25
 
+  // touch controls only during active play (menus / pause / game-over are control-free)
+  document.body.classList.toggle('ingame', appState === 'playing')
+
   // menu keyboard mode
   const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings'
   input.inMenu = inMenu && !ui.screen?.startsWith('over')

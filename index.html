@@ -207,7 +207,7 @@
     #banner.show { opacity: 1; transform: scale(1); }
     /* touch controls — live in the black letterbox OUTSIDE the canvas (positioned by fit()) */
     #touch { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
-    body.touch #touch { display: block; }
+    body.touch.ingame #touch { display: block; }
     .tcluster { position: fixed; pointer-events: auto; display: grid; touch-action: none; }
     #t-dpad { grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 8px; }
     #t-up    { grid-column: 2; grid-row: 1; }
