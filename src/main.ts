@@ -77,21 +77,26 @@ const joyKnob = document.getElementById('joy-knob')!
 function layoutTouch() {
   const sr = stage.getBoundingClientRect()
   const side = (window.innerWidth - sr.width) / 2
-  const bottom = (window.innerHeight - sr.height) / 2
+  // true bottom letterbox: the HUD bar sits ABOVE the stage, so centering in
+  // (innerHeight - stageHeight) would overestimate the bar below
+  const bottom = window.innerHeight - (sr.top + sr.height)
   const joy = settings.moveStyle === 'joystick'
   const moveEl = joy ? joyCluster : dpad
   const moveW = joy ? 150 : 200
   const moveH = joy ? 150 : 130
   const actW = 170, actH = 152
-  const safeB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0
+  const css = getComputedStyle(document.documentElement)
+  const safeB = parseFloat(css.getPropertyValue('--safe-bottom')) || 0
+  const safeL = parseFloat(css.getPropertyValue('--safe-left')) || 0
+  const safeR = parseFloat(css.getPropertyValue('--safe-right')) || 0
   const need = Math.max(moveW, 170) + 16 // both clusters must fit the side bar
   if (side >= need) {
     // landscape: black bars on the left & right (cluster fits fully)
-    moveEl.style.left = `${Math.max(8, side / 2 - moveW / 2)}px`
+    moveEl.style.left = `${Math.max(8 + safeL, side / 2 - moveW / 2)}px`
     moveEl.style.top = `${Math.max(8, (window.innerHeight - moveH) / 2)}px`
     moveEl.style.right = 'auto'
     moveEl.style.bottom = 'auto'
-    actions.style.right = `${Math.max(8, side / 2 - actW / 2)}px`
+    actions.style.right = `${Math.max(8 + safeR, side / 2 - actW / 2)}px`
     actions.style.top = `${Math.max(8, (window.innerHeight - actH) / 2)}px`
     actions.style.left = 'auto'
     actions.style.bottom = 'auto'
@@ -117,14 +122,28 @@ function fit() {
   const scale = Math.min(availW / CANVAS_W, availH / CANVAS_H)
   let w = Math.floor(CANVAS_W * scale)
   let h = Math.floor(CANVAS_H * scale)
+  // which axis limits the fit (direct ratio test — a floor-equality test has a
+  // floating-point gap for ~6% of integer sizes)
+  const widthLimited = availW / CANVAS_W <= availH / CANVAS_H
+  const heightLimited = availH / CANVAS_H <= availW / CANVAS_W
   // height-limited (landscape): guarantee the side letterbox bars fit BOTH
   // clusters (movement AND actions), capping the canvas width when too narrow
-  if (h === Math.floor(availH)) {
+  if (heightLimited) {
     const moveW = settings.moveStyle === 'joystick' ? 150 : 200
     const need = Math.max(moveW, 170) + 16 // 170 = actions cluster width
     if ((availW - w) / 2 < need) {
       w = Math.floor(Math.max(1, availW - 2 * need))
       h = Math.floor(w * CANVAS_H / CANVAS_W)
+    }
+  }
+  // width-limited (portrait): guarantee the bottom letterbox bar fits the
+  // movement cluster, capping the canvas height when the bar would be too short
+  if (widthLimited) {
+    const moveH = settings.moveStyle === 'joystick' ? 150 : 130
+    const need = moveH + 16
+    if ((availH - h) / 2 < need) {
+      h = Math.floor(Math.max(1, availH - 2 * need))
+      w = Math.floor(h * CANVAS_W / CANVAS_H)
     }
   }
   stage.style.width = `${w}px`

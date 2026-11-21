@@ -17,6 +17,8 @@
       --gold: #ffd54a;
       --text: #e8f0ff;
       --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -148,6 +150,10 @@
       gap: 8px;
       padding: 6px 10px;
       padding-top: calc(6px + env(safe-area-inset-top, 0px));
+      /* landscape: the notch/Dynamic Island sits in the top corner — keep the
+         chips out of its side inset (0 in portrait, no change there) */
+      padding-left: calc(10px + env(safe-area-inset-left, 0px));
+      padding-right: calc(10px + env(safe-area-inset-right, 0px));
       pointer-events: none;
       font-variant-numeric: tabular-nums;
       background: linear-gradient(180deg, rgba(6,9,18,.85), rgba(6,9,18,.55));
