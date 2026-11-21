@@ -16,6 +16,7 @@
       --pink: #ff2e88;
       --gold: #ffd54a;
       --text: #e8f0ff;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -209,16 +210,16 @@
     #touch { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
     body.touch.ingame #touch { display: block; }
     .tcluster { position: fixed; pointer-events: auto; display: grid; touch-action: none; }
-    #t-dpad { grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); gap: 8px; }
+    #t-dpad { grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(2, 60px); gap: 10px; }
     #t-up    { grid-column: 2; grid-row: 1; }
     #t-left  { grid-column: 1; grid-row: 2; }
     #t-down  { grid-column: 2; grid-row: 2; }
     #t-right { grid-column: 3; grid-row: 2; }
-    #t-actions { grid-template-rows: auto auto; gap: 10px; justify-items: center; }
+    #t-actions { grid-template-rows: auto auto; gap: 12px; justify-items: center; }
     .trow { display: flex; gap: 10px; align-items: center; }
     /* virtual joystick (default mobile movement) */
     #joy-base {
-      width: 128px; height: 128px; border-radius: 50%;
+      width: 150px; height: 150px; border-radius: 50%;
       border: 2px solid rgba(0,229,255,.35);
       background: rgba(10,16,32,.6);
       box-shadow: 0 4px 14px rgba(0,0,0,.45), inset 0 0 18px rgba(0,229,255,.08);
@@ -226,7 +227,7 @@
     }
     #joy-knob {
       position: absolute; left: 50%; top: 50%;
-      width: 56px; height: 56px; margin: -28px 0 0 -28px;
+      width: 64px; height: 64px; margin: -32px 0 0 -32px;
       border-radius: 50%;
       background: radial-gradient(circle at 35% 30%, rgba(0,229,255,.55), rgba(0,229,255,.14));
       border: 2px solid rgba(0,229,255,.6);
@@ -235,7 +236,7 @@
     body.joy #t-dpad { display: none; }
     body:not(.joy) #t-joy { display: none; }
     .tbtn {
-      width: 54px; height: 54px;
+      width: 60px; height: 60px;
       border-radius: 14px; border: 2px solid rgba(0,229,255,.4);
       background: rgba(10,16,32,.72); color: var(--text);
       display: flex; align-items: center; justify-content: center;
@@ -244,9 +245,9 @@
       box-shadow: 0 4px 14px rgba(0,0,0,.45);
     }
     .tbtn:active { background: rgba(0,229,255,.25); }
-    #t-bomb  { width: 84px; height: 84px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
-    #t-det   { width: 56px; height: 56px; border-color: rgba(255,120,60,.55); font-size: 8.5px; letter-spacing: .02em; border-radius: 50%; }
-    #t-pause { width: 44px; height: 44px; font-size: 16px; border-radius: 50%; }
+    #t-bomb  { width: 92px; height: 92px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
+    #t-det   { width: 64px; height: 64px; border-color: rgba(255,120,60,.55); font-size: 8.5px; letter-spacing: .02em; border-radius: 50%; }
+    #t-pause { width: 48px; height: 48px; font-size: 16px; border-radius: 50%; }
     /* online room code */
     input.code-input {
       font: inherit; font-weight: 900; font-size: 22px; letter-spacing: .35em; text-transform: uppercase;

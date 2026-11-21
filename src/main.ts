@@ -80,10 +80,12 @@ function layoutTouch() {
   const bottom = (window.innerHeight - sr.height) / 2
   const joy = settings.moveStyle === 'joystick'
   const moveEl = joy ? joyCluster : dpad
-  const moveW = joy ? 128 : 178
-  const moveH = joy ? 128 : 116
-  const actW = 150, actH = 138
-  if (side >= moveW + 16) {
+  const moveW = joy ? 150 : 200
+  const moveH = joy ? 150 : 130
+  const actW = 170, actH = 152
+  const safeB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0
+  const need = Math.max(moveW, 170) + 16 // both clusters must fit the side bar
+  if (side >= need) {
     // landscape: black bars on the left & right (cluster fits fully)
     moveEl.style.left = `${Math.max(8, side / 2 - moveW / 2)}px`
     moveEl.style.top = `${Math.max(8, (window.innerHeight - moveH) / 2)}px`
@@ -94,13 +96,13 @@ function layoutTouch() {
     actions.style.left = 'auto'
     actions.style.bottom = 'auto'
   } else {
-    // portrait (or narrow): black bar below the canvas
+    // portrait (or narrow): black bar below the canvas, above the home indicator
     moveEl.style.left = '14px'
-    moveEl.style.bottom = `${Math.max(8, bottom / 2 - moveH / 2)}px`
+    moveEl.style.bottom = `${Math.max(8 + safeB, (bottom - safeB) / 2 - moveH / 2)}px`
     moveEl.style.top = 'auto'
     moveEl.style.right = 'auto'
     actions.style.right = '14px'
-    actions.style.bottom = `${Math.max(8, bottom / 2 - actH / 2)}px`
+    actions.style.bottom = `${Math.max(8 + safeB, (bottom - safeB) / 2 - actH / 2)}px`
     actions.style.top = 'auto'
     actions.style.left = 'auto'
   }
@@ -113,8 +115,18 @@ function fit() {
   const availW = window.innerWidth - pad
   const availH = window.innerHeight - pad - hudH
   const scale = Math.min(availW / CANVAS_W, availH / CANVAS_H)
-  const w = Math.floor(CANVAS_W * scale)
-  const h = Math.floor(CANVAS_H * scale)
+  let w = Math.floor(CANVAS_W * scale)
+  let h = Math.floor(CANVAS_H * scale)
+  // height-limited (landscape): guarantee the side letterbox bars fit BOTH
+  // clusters (movement AND actions), capping the canvas width when too narrow
+  if (h === Math.floor(availH)) {
+    const moveW = settings.moveStyle === 'joystick' ? 150 : 200
+    const need = Math.max(moveW, 170) + 16 // 170 = actions cluster width
+    if ((availW - w) / 2 < need) {
+      w = Math.floor(Math.max(1, availW - 2 * need))
+      h = Math.floor(w * CANVAS_H / CANVAS_W)
+    }
+  }
   stage.style.width = `${w}px`
   stage.style.height = `${h}px`
   canvas.style.width = `${w}px`
