@@ -28,6 +28,8 @@ let remoteInput = { dir: null as Dir | null, bomb: false, detonate: false }
 // client: track last sent dir to only send on change
 let lastSentDir: Dir | null = null
 let snapTimer = 0
+// refit the canvas when the HUD bar appears/disappears (it reserves vertical space)
+let lastHudVisible = false
 // channel is unordered: drop stale messages (seq numbers from Net)
 let lastStateN = 0
 let lastInputN = 0
@@ -105,9 +107,11 @@ function layoutTouch() {
 }
 
 function fit() {
-  const pad = 8
+  const pad = 4
+  const hud = document.getElementById('hud')!
+  const hudH = hud.classList.contains('hidden') ? 0 : hud.offsetHeight
   const availW = window.innerWidth - pad
-  const availH = window.innerHeight - pad
+  const availH = window.innerHeight - pad - hudH
   const scale = Math.min(availW / CANVAS_W, availH / CANVAS_H)
   const w = Math.floor(CANVAS_W * scale)
   const h = Math.floor(CANVAS_H * scale)
@@ -476,7 +480,11 @@ window.addEventListener('pointerdown', () => audio.ensure(), { once: true })
 // ---------- HUD ----------
 
 function hudUpdate(view: Renderable) {
-  if (appState === 'title') { ui.hudSet(null); return }
+  if (appState === 'title') {
+    ui.hudSet(null)
+    if (lastHudVisible) { lastHudVisible = false; fit() }
+    return
+  }
   const p = view.players[0]
   const remaining = view.levelTime - view.time
   // urgency tick under 30s (once per second)
@@ -505,6 +513,7 @@ function hudUpdate(view: Renderable) {
     timerDanger: remaining < 30,
     playerHtml,
   })
+  if (!lastHudVisible) { lastHudVisible = true; fit() }
 }
 
 function pips(n: number, max: number, label: string): string {
