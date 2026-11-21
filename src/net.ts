@@ -3,17 +3,25 @@ import { Peer, type DataConnection } from 'peerjs'
 /**
  * Online battle networking (host-authoritative, PeerJS data channel).
  *
- * Protocol (JSON messages over a reliable WebRTC data channel):
- *   client -> host: { t:'input', dir, bomb, detonate }   (dir on change, bomb/detonate as edges)
- *   host -> client: { t:'state', s: Snapshot }           (~20Hz full snapshot)
+ * Protocol (JSON messages over an UNORDERED WebRTC data channel):
+ *   client -> host: { t:'input', n, dir, bomb, detonate }  (dir on change, bomb/detonate as edges)
+ *   host -> client: { t:'state', n, s: Snapshot }          (~30Hz full snapshot)
  *   both:           { t:'bye' }
+ *
+ * The channel is created with reliable:false (PeerJS → SCTP ordered:false), so
+ * messages can arrive out of order: every state/input message carries a
+ * sequence number `n` and the receiver drops anything stale. This removes
+ * head-of-line blocking — one lost/retransmitted packet no longer stalls all
+ * newer snapshots behind it (the classic cause of stutter over cellular).
+ * Reliability is kept (SCTP retransmits until delivery), so no message is
+ * ever lost; it may just arrive late and be discarded as stale.
  *
  * The host runs the real Game simulation; the client renders snapshots only.
  */
 
 export type NetMsg =
-  | { t: 'input'; dir: number | null; bomb: boolean; detonate: boolean }
-  | { t: 'state'; s: any }
+  | { t: 'input'; n: number; dir: number | null; bomb: boolean; detonate: boolean }
+  | { t: 'state'; n: number; s: any }
   | { t: 'bye' }
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -82,7 +90,12 @@ export class Net {
     this.roomCode = code.toUpperCase()
     this.peer = new Peer({ config: ICE_CONFIG })
     this.peer.on('open', () => {
-      const conn = this.peer!.connect(PEER_PREFIX + this.roomCode, { reliable: true })
+      // reliable:false → PeerJS sets SCTP ordered:false (unordered delivery).
+      // Full-state snapshots make out-of-order harmless (stale ones are
+      // dropped by sequence number); it removes head-of-line blocking on
+      // lossy links. Note: PeerJS does NOT expose maxRetransmits, so SCTP
+      // still retransmits until delivery — nothing is ever lost.
+      const conn = this.peer!.connect(PEER_PREFIX + this.roomCode, { reliable: false })
       this.wire(conn)
     })
     this.peer.on('error', (e: any) => {
@@ -120,6 +133,19 @@ export class Net {
   send(m: NetMsg) {
     if (!this.connected || !this.conn) return
     try { this.conn.send(m) } catch {}
+  }
+
+  /** monotonic sequence numbers — the channel is unordered, receivers drop stale msgs */
+  private seq = 0
+
+  /** host: broadcast a snapshot (auto-seq) */
+  sendState(s: any) {
+    this.send({ t: 'state', n: ++this.seq, s })
+  }
+
+  /** client: send input (auto-seq) */
+  sendInput(dir: number | null, bomb: boolean, detonate: boolean) {
+    this.send({ t: 'input', n: ++this.seq, dir, bomb, detonate })
   }
 
   /** which ICE path the data channel is on: 'host' (direct: LAN/tailnet),

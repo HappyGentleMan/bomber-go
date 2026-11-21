@@ -28,6 +28,9 @@ let remoteInput = { dir: null as Dir | null, bomb: false, detonate: false }
 // client: track last sent dir to only send on change
 let lastSentDir: Dir | null = null
 let snapTimer = 0
+// channel is unordered: drop stale messages (seq numbers from Net)
+let lastStateN = 0
+let lastInputN = 0
 
 // Live debug handle for browser inspection / automated testing (read-only view).
 Object.defineProperty(window, '__game', { get: () => game, configurable: true })
@@ -163,6 +166,8 @@ function leaveNet() {
   lastSentDir = null
   remoteInput = { dir: null, bomb: false, detonate: false }
   snapTimer = 0
+  lastStateN = 0
+  lastInputN = 0
 }
 
 /** show which path the WebRTC link is on (confirm tailnet direct-connect works) */
@@ -236,12 +241,16 @@ function joinOnline() {
 /** host: receive the client's input; both: handle drop-offs */
 net.onMessage = (m) => {
   if (m.t === 'input' && netRole === 'host') {
+    if (m.n <= lastInputN) return // unordered channel: stale input
+    lastInputN = m.n
     remoteInput.dir = m.dir as Dir | null // null = released → stop
     if (m.bomb) remoteInput.bomb = true
     if (m.detonate) remoteInput.detonate = true
     return
   }
   if (m.t !== 'state' || netRole !== 'client' || !remote) return
+  if (m.n <= lastStateN) return // unordered channel: stale snapshot
+  lastStateN = m.n
   const ev = diffSnapshots(prevSnap, m.s)
   prevSnap = m.s
   remote.apply(m.s)
@@ -533,12 +542,13 @@ function loop(now: number) {
       if (netRole === 'host') { remoteInput.bomb = false; remoteInput.detonate = false }
       acc -= STEP
     }
-    // host: broadcast snapshots ~20Hz
+    // host: broadcast snapshots ~30Hz (higher rate = smoother interpolation,
+    // and frequency covers for the occasional lost/delayed snapshot)
     if (netRole === 'host') {
       snapTimer += dt
-      if (snapTimer >= 0.05) {
+      if (snapTimer >= 1 / 30) {
         snapTimer = 0
-        net.send({ t: 'state', s: serializeGame(game) })
+        net.sendState(serializeGame(game))
       }
     }
     audio.suddenDeath = game.suddenDeath
@@ -550,10 +560,10 @@ function loop(now: number) {
     const inputs = input.poll()
     if (inputs.p1.dir !== lastSentDir) {
       lastSentDir = inputs.p1.dir
-      net.send({ t: 'input', dir: inputs.p1.dir, bomb: false, detonate: false })
+      net.sendInput(inputs.p1.dir, false, false)
     }
-    if (inputs.p1.bomb) net.send({ t: 'input', dir: lastSentDir, bomb: true, detonate: false })
-    if (inputs.p1.detonate) net.send({ t: 'input', dir: lastSentDir, bomb: false, detonate: true })
+    if (inputs.p1.bomb) net.sendInput(lastSentDir, true, false)
+    if (inputs.p1.detonate) net.sendInput(lastSentDir, false, true)
     acc = 0
   } else {
     input.poll() // consume so keys don't stick

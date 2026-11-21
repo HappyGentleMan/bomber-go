@@ -5,7 +5,7 @@ import type { Dir, PowerupKind } from './constants'
 
 /**
  * Online battle: host-authoritative snapshots.
- * Host serializes the live Game ~20Hz; the client applies it to a plain
+ * Host serializes the live Game ~30Hz; the client applies it to a plain
  * "remote game" object that the Renderer can draw (no simulation on client).
  */
 
@@ -83,8 +83,8 @@ export class RemoteGame {
 
   /** interpolation factor between the two most recent snapshots (0 = new, 1 = caught up) */
   alpha = 1
-  /** average snapshot interval, used to advance alpha (host sends ~20 Hz) */
-  private snapInterval = 0.05
+  /** average snapshot interval, used to advance alpha (host sends ~30 Hz) */
+  private snapInterval = 1 / 30
 
   getShakeOffset() { return this.shakeOff }
   getFlashAlpha() { return this.flashAlpha }
