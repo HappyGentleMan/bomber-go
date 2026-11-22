@@ -63,6 +63,7 @@ export class Net {
   onOpen: (() => void) | null = null
   onClose: (() => void) | null = null
   onError: ((msg: string) => void) | null = null
+  private joinTimer: number | null = null
 
   /** host: create a room with a generated code, wait for one opponent */
   host() {
@@ -89,6 +90,10 @@ export class Net {
     this.isHost = false
     this.roomCode = code.toUpperCase()
     this.peer = new Peer({ config: ICE_CONFIG })
+    // if the room isn't reachable in 20s, say so — an endless "Joining…" is worse
+    this.joinTimer = window.setTimeout(() => {
+      if (!this.connected) this.onError?.('Cannot reach server — check your connection')
+    }, 20000)
     this.peer.on('open', () => {
       // reliable:false → PeerJS sets SCTP ordered:false (unordered delivery).
       // Full-state snapshots make out-of-order harmless (stale ones are
@@ -101,13 +106,14 @@ export class Net {
     this.peer.on('error', (e: any) => {
       const type = e?.type ?? ''
       if (type === 'peer-unavailable') this.onError?.('Room not found — check the code')
-      else if (type !== 'network') this.onError?.(type || 'network error')
+      else this.onError?.(type || 'network error')
     })
   }
 
   private wire(conn: DataConnection) {
     conn.on('open', () => {
       if (this.conn && this.conn !== conn) { try { conn.close() } catch {} return }
+      if (this.joinTimer !== null) { window.clearTimeout(this.joinTimer); this.joinTimer = null }
       this.conn = conn
       this.connected = true
       this.onOpen?.()
@@ -168,6 +174,7 @@ export class Net {
   }
 
   destroy() {
+    if (this.joinTimer !== null) { window.clearTimeout(this.joinTimer); this.joinTimer = null }
     try { this.send({ t: 'bye' }) } catch {}
     try { this.conn?.close() } catch {}
     try { this.peer?.destroy() } catch {}

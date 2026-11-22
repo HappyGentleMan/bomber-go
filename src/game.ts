@@ -68,6 +68,7 @@ export class Game {
   winner: number = -1 // battle
   round = 1                     // battle: current round
   roundWins: [number, number] = [0, 0] // battle: rounds won per player
+  lastRoundWin = -1             // battle: winner of the round that just ended (-1 = none)
   bombId = 1
   exitTimer = 0
   particles = new Particles()
@@ -942,6 +943,7 @@ export class Game {
     if (winner >= 0) this.roundWins[winner]++
     const done = winner >= 0 && this.roundWins[winner] >= BATTLE_ROUND_TARGET
     if (!done) {
+      this.lastRoundWin = winner
       this.emit('roundwin', { winner, round: this.round, roundWins: [...this.roundWins] })
       this.startRound()
       return

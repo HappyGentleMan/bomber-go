@@ -37,6 +37,7 @@ export function serializeGame(g: Game): any {
     round: g.round,
     roundWins: g.roundWins,
     winner: g.winner,
+    lastRoundWin: g.lastRoundWin,
     suddenDeath: g.suddenDeath,
     freezeUntil: +g.freezeUntil.toFixed(2),
     flash: [g.flashColor, +g.getFlashAlpha().toFixed(3)],
@@ -73,6 +74,7 @@ export class RemoteGame {
   round = 1
   roundWins: [number, number] = [0, 0]
   winner = -1
+  lastRoundWin = -1
   suddenDeath = false
   freezeUntil = 0
   flashColor = '255,255,255'
@@ -80,6 +82,8 @@ export class RemoteGame {
   particles = new Particles()
 
   private shakeOff = { x: 0, y: 0 }
+  /** true once the first snapshot has been applied — the renderer must not draw before this */
+  ready = false
 
   /** interpolation factor between the two most recent snapshots (0 = new, 1 = caught up) */
   alpha = 1
@@ -112,6 +116,7 @@ export class RemoteGame {
     this.round = s.round
     this.roundWins = s.roundWins
     this.winner = s.winner
+    this.lastRoundWin = s.lastRoundWin
     this.suddenDeath = s.suddenDeath
     this.freezeUntil = s.freezeUntil
     this.flashColor = s.flash[0]
@@ -162,6 +167,7 @@ export class RemoteGame {
     }))
     // start interpolating from the previous snapshot toward this one
     this.alpha = 0
+    this.ready = true
   }
 }
 
@@ -193,8 +199,10 @@ export function diffSnapshots(prev: any, cur: any): NetEvents {
   if (cur.state === 'battleover' && prev.state !== 'battleover') {
     ev.battleOver = true
     ev.roundWin = cur.winner
+  } else if (cur.lastRoundWin !== prev.lastRoundWin && cur.lastRoundWin >= 0) {
+    // a round just ended with a winner
+    ev.roundWin = cur.lastRoundWin
   } else if (cur.state === 'playing' && prev.state === 'playing' && cur.round !== prev.round) {
-    // round just restarted
     ev.roundWin = -1
   }
   return ev

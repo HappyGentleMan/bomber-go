@@ -158,8 +158,17 @@ fit()
 
 // ---------- game lifecycle ----------
 
+/** true once a battle ended (host stops simulating until the next match) */
+let matchOver = false
+let attractTimer: number | null = null
+function resetMatchState() {
+  matchOver = false
+  if (attractTimer !== null) { window.clearTimeout(attractTimer); attractTimer = null }
+}
+
 function startCampaign(): Game {
   game = new Game('campaign')
+  resetMatchState()
   wireGame()
   appState = 'playing'
   lastTickSecond = -1
@@ -172,6 +181,7 @@ function startCampaign(): Game {
 
 function startBattle(aiP2: boolean): Game {
   game = new Game('battle', { aiPlayer2: aiP2 })
+  resetMatchState()
   wireGame()
   appState = 'playing'
   lastTickSecond = -1
@@ -185,6 +195,7 @@ function startBattle(aiP2: boolean): Game {
 
 function startAttract() {
   game = new Game('battle', { aiPlayer2: true, attract: true })
+  resetMatchState()
   wireGame()
   appState = 'title'
   ui.show('title')
@@ -203,6 +214,7 @@ function leaveNet() {
   snapTimer = 0
   lastStateN = 0
   lastInputN = 0
+  resetMatchState()
 }
 
 /** show which path the WebRTC link is on (confirm tailnet direct-connect works) */
@@ -236,6 +248,7 @@ function hostOnline() {
     if (hostWaitHint !== null) { window.clearTimeout(hostWaitHint); hostWaitHint = null }
     ui.onlineStatus(`OPPONENT CONNECTED — FIGHT!`, 'ok')
     netRole = 'host'
+    resetMatchState()
     game = new Game('battle', { aiPlayer2: false })
     wireGame()
     appState = 'playing'
@@ -260,6 +273,7 @@ function joinOnline() {
   net.onOpen = () => {
     ui.onlineStatus('CONNECTED — FIGHT!', 'ok')
     netRole = 'client'
+    resetMatchState()
     remote = new RemoteGame()
     prevSnap = null
     game = null
@@ -304,6 +318,7 @@ net.onMessage = (m) => {
     ui.setRematchHidden(true)
     ui.show('battleover')
     appState = 'title'
+    leaveNet() // client: the match is over — tear down the link (host stays up for rematch)
   }
 }
 net.onClose = () => {
@@ -353,7 +368,7 @@ function wireGame() {
         break
       case 'battleover':
         if (game!.attract) {
-          window.setTimeout(startAttract, 1500)
+          attractTimer = window.setTimeout(startAttract, 1500)
         } else {
           const online = netRole === 'host'
           ui.showBattleOver(data.winner, [game!.players[0].kills, game!.players[1].kills], battleOpts.aiPlayer2,
@@ -362,6 +377,7 @@ function wireGame() {
           ui.setRematchHidden(online)
           ui.show('battleover')
           appState = 'title'
+          matchOver = true // host: stop simulating; the frozen field stays behind the overlay
         }
         break
     }
@@ -573,7 +589,7 @@ function loop(now: number) {
   const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings'
   input.inMenu = inMenu && !ui.screen?.startsWith('over')
 
-  if (game && appState !== 'paused') {
+  if (game && appState !== 'paused' && !matchOver) {
     acc += dt
     while (acc >= STEP) {
       const inputs = input.poll()
@@ -632,7 +648,7 @@ function loop(now: number) {
     // render interpolation: draw between the last two 60 Hz simulation ticks
     renderer.draw(game, now / 1000, appState === 'paused' ? 1 : Math.min(1, acc / STEP))
     hudUpdate(game)
-  } else if (remote) {
+  } else if (remote && remote.ready) {
     renderer.draw(remote, now / 1000, remote.alpha)
     hudUpdate(remote)
   }
@@ -645,7 +661,8 @@ startAttract()
 
 // auto-pause when the tab loses focus (prevents losing a life in the background)
 // online clients can't pause — the host keeps simulating
-const autoPause = () => { if (appState === 'playing' && netRole !== 'client') pause() }
+// a host with a connected client also must not pause: that would freeze the opponent
+const autoPause = () => { if (appState === 'playing' && netRole !== 'client' && !(netRole === 'host' && net.connected)) pause() }
 window.addEventListener('blur', autoPause)
 document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause() })
 

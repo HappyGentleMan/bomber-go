@@ -19,6 +19,7 @@ Object.defineProperty(globalThis, 'navigator', {
 const { Game } = await import('../src/game.ts')
 const { updateSettings, settings } = await import('../src/storage.ts')
 const { MAX_POWERUPS_ON_FIELD } = await import('../src/constants.ts')
+const { RemoteGame, serializeGame, diffSnapshots } = await import('../src/netgame.ts')
 
 let failures = 0
 const check = (name: string, cond: boolean, extra = '') => {
@@ -131,6 +132,28 @@ console.log('— Power>=4 blast hit-stops —')
     tick(b)
     check('power>=4 detonation hit-stops', b.timeScale < 1, `timeScale=${b.timeScale}`)
   }
+}
+
+console.log('— RemoteGame ready flag (join-race gate) —')
+{
+  const r = new RemoteGame()
+  check('remote not ready before first snapshot', r.ready === false, `ready=${(r as any).ready}`)
+  const g = new Game('battle', { aiPlayer2: true })
+  r.apply(serializeGame(g))
+  check('remote ready after first snapshot', r.ready === true)
+}
+
+console.log('— Round winner reaches the client via snapshot —')
+{
+  const g = new Game('battle', { aiPlayer2: true })
+  g.endBattle(0) // awards the round to P1; state stays 'playing' (1 < round target)
+  const snap = serializeGame(g)
+  check('snapshot carries lastRoundWin', snap.lastRoundWin === 0, `lastRoundWin=${snap.lastRoundWin}`)
+  const prev = { ...snap, lastRoundWin: -1, state: 'playing', round: snap.round - 1 }
+  const ev = diffSnapshots(prev, snap)
+  check('diff reports round winner to client', ev.roundWin === 0, `roundWin=${ev.roundWin}`)
+  const ev2 = diffSnapshots(snap, { ...snap })
+  check('no spurious round event on identical snapshots', ev2.roundWin === -1)
 }
 
 console.log(failures === 0 ? '\nALL AUDIT TESTS PASSED' : `\n${failures} FAILURES`)
