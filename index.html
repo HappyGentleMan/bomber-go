@@ -46,13 +46,14 @@
     #stage { animation: stageglow 4.5s ease-in-out infinite; }
     .overlay {
       position: absolute; inset: 0;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: safe center;
       gap: 18px;
       background: radial-gradient(ellipse 90% 70% at 50% 42%, rgba(10,16,32,.66) 0%, rgba(6,9,18,.88) 100%);
       -webkit-backdrop-filter: blur(7px);
       backdrop-filter: blur(7px);
       z-index: 10;
       padding: 20px;
+      overflow-y: auto;
     }
     .hidden { display: none !important; }
     /* staggered entrance for overlay content */
@@ -185,6 +186,14 @@
       animation: pulse 1s infinite;
     }
     @keyframes pulse { 50% { opacity: .4; } }
+    /* HUD feedback: pips bump on change, red glow on life loss */
+    @keyframes pipbump { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    #hud-player.bump { animation: pipbump .28s ease; }
+    @keyframes hudhurt {
+      0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); }
+      40% { box-shadow: 0 0 22px rgba(255,82,82,.85), inset 0 0 12px rgba(255,82,82,.4); border-color: rgba(255,82,82,.8); }
+    }
+    #hud-player.hurt { animation: hudhurt .5s ease; }
     @keyframes logopulse {
       0%, 100% { filter: drop-shadow(0 0 18px rgba(0,229,255,.45)); }
       50% { filter: drop-shadow(0 0 30px rgba(0,229,255,.8)); }
@@ -253,7 +262,8 @@
     .tbtn:active { background: rgba(0,229,255,.25); }
     #t-bomb  { width: 92px; height: 92px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
     #t-det   { width: 64px; height: 64px; border-color: rgba(255,120,60,.55); font-size: 8.5px; letter-spacing: .02em; border-radius: 50%; }
-    #t-pause { width: 48px; height: 48px; font-size: 16px; border-radius: 50%; }
+    #t-pause { width: 48px; height: 48px; font-size: 16px; border-radius: 50%; background: rgba(10,16,32,.45); }
+    #t-pause-wrap { justify-items: center; }
     /* online room code */
     input.code-input {
       font: inherit; font-weight: 900; font-size: 22px; letter-spacing: .35em; text-transform: uppercase;
@@ -321,7 +331,7 @@
           <button class="btn" data-action="battle-2p">2P LOCAL</button>
           <button class="btn" data-action="back">BACK</button>
         </div>
-        <div class="hint">P1 <span class="kbd">WASD</span>+<span class="kbd">SPACE</span> · P2 <span class="kbd">IJKL</span>+<span class="kbd">ENTER</span></div>
+        <div class="hint">P1 <span class="kbd">WASD</span>+<span class="kbd">SPACE</span> · P2 <span class="kbd">IJKL</span>+<span class="kbd">ENTER</span> · 2P LOCAL needs 2 keyboards / gamepads</div>
       </div>
 
       <!-- Settings -->
@@ -382,6 +392,7 @@
         <div class="panel">
           <div id="clear-stats" class="hint" style="font-size:14px"></div>
         </div>
+        <div class="hint" style="letter-spacing:.2em">TAP TO CONTINUE</div>
       </div>
 
       <!-- Round over (battle) -->
@@ -406,6 +417,7 @@
           <div class="row">
             <input class="code-input" id="online-code" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE" />
             <button class="btn" style="min-width:0; padding:10px 18px" data-action="online-join">JOIN</button>
+            <button class="btn hidden" id="online-copy" style="min-width:0; padding:10px 18px" data-action="online-copy">COPY CODE</button>
           </div>
           <div class="hint" id="online-status" style="margin-top:10px; letter-spacing:.08em"></div>
         </div>
@@ -425,11 +437,14 @@
         <div id="joy-base"><div id="joy-knob"></div></div>
       </div>
       <div class="tcluster" id="t-actions">
-        <div class="tbtn" id="t-pause">II</div>
         <div class="trow">
           <div class="tbtn" id="t-bomb">BOMB</div>
           <div class="tbtn" id="t-det">DETONATE</div>
         </div>
+      </div>
+      <!-- pause lives at the canvas corner (not stacked above BOMB) -->
+      <div class="tcluster" id="t-pause-wrap">
+        <div class="tbtn" id="t-pause">II</div>
       </div>
     </div>
   </div>

@@ -18,6 +18,7 @@ let game: Game | null = null
 let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
 let lastTickSecond = -1
+let lastLives = -1 // life-loss flash detection in hudUpdate
 
 // ---------- online battle state ----------
 let netRole: 'none' | 'host' | 'client' = 'none'
@@ -68,6 +69,7 @@ Object.defineProperty(window, '__net', { get: () => net, configurable: true })
 
 const dpad = document.getElementById('t-dpad')!
 const actions = document.getElementById('t-actions')!
+const pauseWrap = document.getElementById('t-pause-wrap')!
 const joyCluster = document.getElementById('t-joy')!
 const joyBase = document.getElementById('joy-base')!
 const joyKnob = document.getElementById('joy-knob')!
@@ -111,6 +113,12 @@ function layoutTouch() {
     actions.style.top = 'auto'
     actions.style.left = 'auto'
   }
+  // pause: always at the canvas top-right corner — out of the action cluster,
+  // so it's reachable without moving the thumb off BOMB
+  pauseWrap.style.left = `${sr.right - 56}px`
+  pauseWrap.style.top = `${sr.top + 8}px`
+  pauseWrap.style.right = 'auto'
+  pauseWrap.style.bottom = 'auto'
 }
 
 function fit() {
@@ -122,6 +130,11 @@ function fit() {
   const scale = Math.min(availW / CANVAS_W, availH / CANVAS_H)
   let w = Math.floor(CANVAS_W * scale)
   let h = Math.floor(CANVAS_H * scale)
+  // safe-area insets must count against the letterbox budget, not just the clusters
+  const css = getComputedStyle(document.documentElement)
+  const safeL = parseFloat(css.getPropertyValue('--safe-left')) || 0
+  const safeR = parseFloat(css.getPropertyValue('--safe-right')) || 0
+  const safeB = parseFloat(css.getPropertyValue('--safe-bottom')) || 0
   // which axis limits the fit (direct ratio test — a floor-equality test has a
   // floating-point gap for ~6% of integer sizes)
   const widthLimited = availW / CANVAS_W <= availH / CANVAS_H
@@ -130,7 +143,7 @@ function fit() {
   // clusters (movement AND actions), capping the canvas width when too narrow
   if (heightLimited) {
     const moveW = settings.moveStyle === 'joystick' ? 150 : 200
-    const need = Math.max(moveW, 170) + 16 // 170 = actions cluster width
+    const need = Math.max(moveW, 170) + 16 + safeL + safeR // 170 = actions cluster width
     if ((availW - w) / 2 < need) {
       w = Math.floor(Math.max(1, availW - 2 * need))
       h = Math.floor(w * CANVAS_H / CANVAS_W)
@@ -140,7 +153,7 @@ function fit() {
   // movement cluster, capping the canvas height when the bar would be too short
   if (widthLimited) {
     const moveH = settings.moveStyle === 'joystick' ? 150 : 130
-    const need = moveH + 16
+    const need = moveH + 16 + safeB
     if ((availH - h) / 2 < need) {
       h = Math.floor(Math.max(1, availH - 2 * need))
       w = Math.floor(h * CANVAS_W / CANVAS_H)
@@ -214,6 +227,7 @@ function leaveNet() {
   snapTimer = 0
   lastStateN = 0
   lastInputN = 0
+  ui.showOnlineCopy(false)
   resetMatchState()
 }
 
@@ -238,6 +252,7 @@ function hostOnline() {
   }
   net.host()
   ui.onlineStatus(`ROOM ${net.roomCode} — share the code, waiting for opponent…`)
+  ui.showOnlineCopy(true)
   // nobody joined after 25s: most likely cross-network without a working relay,
   // or iOS Safari WebRTC quirks (private relay / carrier NAT / iOS 26 Safari regression)
   hostWaitHint = window.setTimeout(() => {
@@ -249,6 +264,7 @@ function hostOnline() {
     ui.onlineStatus(`OPPONENT CONNECTED — FIGHT!`, 'ok')
     netRole = 'host'
     resetMatchState()
+    ui.showOnlineCopy(false)
     game = new Game('battle', { aiPlayer2: false })
     wireGame()
     appState = 'playing'
@@ -266,6 +282,7 @@ function joinOnline() {
   const code = ui.getOnlineCode()
   if (code.length < 4) { ui.onlineStatus('Enter the 5-letter room code first', 'err'); return }
   ui.onlineStatus(`Joining room ${code}…`)
+  ui.showOnlineCopy(false)
   net.onError = (msg) => {
     ui.onlineStatus(msg, 'err')
     if (!net.connected) leaveNet()
@@ -274,6 +291,7 @@ function joinOnline() {
     ui.onlineStatus('CONNECTED — FIGHT!', 'ok')
     netRole = 'client'
     resetMatchState()
+    ui.showOnlineCopy(false)
     remote = new RemoteGame()
     prevSnap = null
     game = null
@@ -420,6 +438,11 @@ ui.onAction = (action: string) => {
     case 'online': ui.show('online'); ui.menuIndex = 0; break
     case 'online-host': hostOnline(); break
     case 'online-join': joinOnline(); break
+    case 'online-copy':
+      navigator.clipboard?.writeText(net.roomCode ?? '')
+        .then(() => ui.onlineStatus('COPIED!', 'ok'))
+        .catch(() => ui.onlineStatus('COPY FAILED', 'err'))
+      break
     case 'scores': ui.showScores(); ui.show('scores'); break
     case 'settings': ui.show('settings'); break
     case 'back':
@@ -446,6 +469,8 @@ input.onTogglePause = () => {
   else if (appState === 'paused') resume()
 }
 input.onMenuNav = (d) => {
+  // the level-clear panel: any confirm key continues
+  if (ui.screen === 'clear') { if (d === 'ok') ui.show(null); return }
   if (appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings') {
     if (ui.screen === 'pause') return
     if (ui.screen === 'over') return
@@ -542,6 +567,9 @@ document.getElementById('t-pause')!.addEventListener('touchstart', (e) => {
 // audio unlock on first gesture
 window.addEventListener('pointerdown', () => audio.ensure(), { once: true })
 
+// level-clear panel: tap anywhere on the field to continue
+stage.addEventListener('pointerdown', () => { if (ui.screen === 'clear') ui.show(null) })
+
 // ---------- HUD ----------
 
 function hudUpdate(view: Renderable) {
@@ -578,6 +606,14 @@ function hudUpdate(view: Renderable) {
     timerDanger: remaining < 30,
     playerHtml,
   })
+  // life-loss flash: red pulse on the player chip when a heart drops
+  if (view.mode === 'campaign' && view.lives < lastLives) {
+    const hp = document.getElementById('hud-player')!
+    hp.classList.remove('hurt')
+    void hp.offsetWidth // retrigger the animation
+    hp.classList.add('hurt')
+  }
+  lastLives = view.mode === 'campaign' ? view.lives : -1
   if (!lastHudVisible) { lastHudVisible = true; fit() }
 }
 
@@ -600,14 +636,15 @@ function loop(now: number) {
   last = now
   if (dt > 0.25) dt = 0.25
 
-  // touch controls only during active play (menus / pause / game-over are control-free)
-  document.body.classList.toggle('ingame', appState === 'playing')
+  // touch controls only during active play (menus / pause / game-over are control-free;
+  // the level-clear panel freezes the field, so hide the controls under it)
+  document.body.classList.toggle('ingame', appState === 'playing' && ui.screen !== 'clear')
 
-  // menu keyboard mode
-  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings'
+  // menu keyboard mode (the level-clear panel also takes confirm keys)
+  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings' || ui.screen === 'clear'
   input.inMenu = inMenu && !ui.screen?.startsWith('over')
 
-  if (game && appState !== 'paused' && !matchOver) {
+  if (game && appState !== 'paused' && !matchOver && ui.screen !== 'clear') {
     acc += dt
     while (acc >= STEP) {
       const inputs = input.poll()

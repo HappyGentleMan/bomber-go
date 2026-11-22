@@ -14,6 +14,7 @@ export class UI {
   savedScore = false
   private scoreRaf = 0
   private bannerTimer = 0
+  private lastPlayerHtml = ''
 
   init() {
     document.querySelectorAll('[data-action]').forEach(btn => {
@@ -185,10 +186,18 @@ export class UI {
     el.classList.remove('hidden')
     $('hud-score-v').textContent = h.score.toLocaleString()
     $('hud-level').textContent = h.level > 0 ? `LV ${h.level}` : ''
+    ;($('hud-level').parentElement as HTMLElement).classList.toggle('hidden', h.level <= 0)
     const timer = $('hud-timer')
     timer.textContent = String(Math.max(0, Math.ceil(h.timer)))
     timer.classList.toggle('danger', h.timerDanger)
-    $('hud-player').innerHTML = h.playerHtml
+    const pl = $('hud-player')
+    if (h.playerHtml !== this.lastPlayerHtml) {
+      pl.innerHTML = h.playerHtml
+      this.lastPlayerHtml = h.playerHtml
+      pl.classList.remove('bump')
+      void pl.offsetWidth // retrigger the bump animation
+      pl.classList.add('bump')
+    }
   }
 
   showScores() {
