@@ -14,6 +14,7 @@ import type {
 import { generateLevel, generateBattleMap, levelEnemies, type Grid, type LevelDef } from './level'
 import { Particles } from './particles'
 import { audio } from './audio'
+import { settings } from './storage'
 import { ENEMY_DEFS } from './enemies'
 import type { EnemyDef } from './types'
 
@@ -63,6 +64,7 @@ export class Game {
   clearTimer = 0
   overTimer = 0
   lastKiller: number = -1
+  lastSuddenDetonation = 0 // time of the last sudden-death (owner -1) bomb detonation
   winner: number = -1 // battle
   round = 1                     // battle: current round
   roundWins: [number, number] = [0, 0] // battle: rounds won per player
@@ -246,8 +248,10 @@ export class Game {
     const p = this.players.find(pl => pl.id === pid)
     if (!p || !p.alive || this.state !== 'playing') return
     if (dir !== null) p.movingDir = dir
-    if (bomb) this.tryPlaceBomb(p)
-    if (detonate) {
+    // a stunned player can be hit, not strike: bomb/detonate are gated
+    const stunned = p.frozenUntil > this.time
+    if (bomb && !stunned) this.tryPlaceBomb(p)
+    if (detonate && !stunned) {
       const oldest = this.bombs.filter(b => b.owner === pid).sort((a, b) => a.born - b.born)[0]
       if (oldest) this.detonate(oldest)
     }
@@ -462,7 +466,9 @@ export class Game {
       this.lastKiller = -1
       // credit kill to opponent (unless sudden-death bomb or mutual kill)
       const opp = this.players.find(q => q.id !== p.id)
-      const suddenBomb = this.bombs.some(b => b.owner === -1)
+      // the sudden-death bomb is spliced out of `bombs` the same tick its flame
+      // kills, so a time window (not a bomb scan) is the reliable check
+      const suddenBomb = this.time - this.lastSuddenDetonation < 0.5
       if (opp && opp.alive && !suddenBomb) {
         opp.kills++
         this.score += 1000
@@ -487,11 +493,13 @@ export class Game {
 
   respawnPlayer(p: PlayerState) {
     const s = this.def.playerSpawns[p.id] ?? { col: 1, row: 1 }
+    if (this.bombAt(s.col, s.row)) return // spawn tile occupied by a live bomb — retry next tick
     p.alive = true
     p.col = s.col; p.row = s.row; p.x = s.col; p.y = s.row
     p.moving = false; p.movingDir = null; p.dir = 0
     p.invincibleUntil = this.time + SPAWN_INVULN / 1000
     p.shieldUntil = 0; p.wallpassUntil = 0
+    p.frozenUntil = 0 // a stun must not survive death + respawn
     audio.play('spawn')
   }
 
@@ -618,7 +626,7 @@ export class Game {
     })
     if (options.length === 0) return e.dir
     // prefer non-reverse
-    const reverse = ((e.dir + 2) % 4) as Dir
+    const reverse = (e.dir ^ 1) as Dir
     const pref = options.filter(d => d !== reverse)
     const pool = pref.length ? pref : options
 
@@ -761,15 +769,17 @@ export class Game {
     }
   }
 
-  /** pick a powerup kind using POWERUP_DEFS weights (bomb/flame common, life rare) */
-  private weightedPowerupKind() {
-    const total = POWERUP_KINDS.reduce((s, k) => s + POWERUP_DEFS[k].weight, 0)
+  /** pick a powerup kind using POWERUP_DEFS weights (bomb/flame common, life rare).
+   *  Battle has no life system, so `life` is excluded there. */
+  private weightedPowerupKind(excludeLife = false) {
+    const kinds = excludeLife ? POWERUP_KINDS.filter(k => k !== 'life') : POWERUP_KINDS
+    const total = kinds.reduce((s, k) => s + POWERUP_DEFS[k].weight, 0)
     let r = Math.random() * total
-    for (const k of POWERUP_KINDS) {
+    for (const k of kinds) {
       r -= POWERUP_DEFS[k].weight
       if (r <= 0) return k
     }
-    return POWERUP_KINDS[POWERUP_KINDS.length - 1]
+    return kinds[kinds.length - 1]
   }
 
   // ---------------- bombs & flames ----------------
@@ -815,13 +825,16 @@ export class Game {
 
   detonate(b: BombState, chain = false) {
     const idx = this.bombs.indexOf(b)
-    if (idx >= 0) this.bombs.splice(idx, 1)
+    if (idx < 0) return // already chain-detonated this tick — no double blast
+    this.bombs.splice(idx, 1)
+    if (b.owner === -1) this.lastSuddenDetonation = this.time
     const { col, row, power } = b
     const cx = col * 48 + 24, cy = row * 48 + 24
     this.particles.explosion(cx, cy)
     this.shake(7, 0.3)
     audio.play(power >= 4 ? 'boomBig' : 'boom')
     haptic(power >= 4 ? 130 : 70, power >= 4 ? 1 : 0.7, 0.5)
+    if (power >= 4) this.hitStop(0.45, 0.05) // big blasts land harder
     if (!chain) this.killChain = 0
     const queue: BombState[] = []
     // core
@@ -1034,7 +1047,10 @@ export class Game {
       // battle: periodic item drops on open tiles (no enemies to kill, so
       // campaign's kill-drops never happen here; AI already hunts these)
       this.battleNextItem -= gdt
-      if (this.battleNextItem <= 0 && this.state === 'playing') {
+      // cap the *dropped* (revealed) items — the map's hidden items don't count,
+      // a battle map can legitimately ship with more than MAX on field
+      const dropped = this.powerups.filter(u => u.revealed).length
+      if (this.battleNextItem <= 0 && this.state === 'playing' && dropped < MAX_POWERUPS_ON_FIELD) {
         this.battleNextItem = 16 + Math.random() * 8
         const spots: { c: number; r: number }[] = []
         for (let r = 1; r < ROWS - 1; r++)
@@ -1047,7 +1063,7 @@ export class Game {
           }
         if (spots.length) {
           const s = spots[Math.floor(Math.random() * spots.length)]
-          this.powerups.push({ col: s.c, row: s.r, kind: this.weightedPowerupKind(), born: this.time, revealed: true })
+          this.powerups.push({ col: s.c, row: s.r, kind: this.weightedPowerupKind(true), born: this.time, revealed: true })
         }
       }
     }
@@ -1102,6 +1118,7 @@ export class Game {
   }
 
   getShakeOffset(): { x: number; y: number } {
+    if (!settings.shake) return { x: 0, y: 0 } // motion-sensitivity setting
     if (this.shakeT <= 0) return { x: 0, y: 0 }
     const m = this.shakeMag * (this.shakeT / this.shakeDur)
     return {
@@ -1853,7 +1870,7 @@ export class Game {
       const route = this.survivalRoute(p) ?? this.escapeRoute(p, soon)
       if (route) return follow(route)
       // only the forward tile is threatened: back off
-      const back = ((p.dir + 2) % 4) as Dir
+      const back = (p.dir ^ 1) as Dir
       const [bc, br] = dirVec(back)
       if (this.canStep(p, back)
         && ![...this.boxTilesAt(p.x + bc * 0.5, p.y + br * 0.5)].some(k => soon.has(k))) return back
@@ -1930,7 +1947,7 @@ export class Game {
         - (p.movingDir !== null && q === (p.movingDir ^ 1) ? 4 : 0)
       if (open > bestOpen) { bestOpen = open; best = q }
     }
-    return best ?? (((p.dir + 2) % 4) as Dir)
+    return best ?? ((p.dir ^ 1) as Dir)
   }
 
   private bombHits(b: BombState, c: number, r: number): boolean {
