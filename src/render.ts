@@ -1,4 +1,4 @@
-import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H, themeForLevel, type Theme, type PowerupKind } from './constants'
+import { TILE, COLS, ROWS, T_HARD, T_SOFT, POWERUP_DEFS, CANVAS_W, CANVAS_H, FLAME_DURATION, themeForLevel, type Theme, type PowerupKind } from './constants'
 import type { PlayerState, EnemyState, BombState } from './types'
 import type { Particles } from './particles'
 import { ENEMY_DEFS } from './enemies'
@@ -487,8 +487,11 @@ export class Renderer {
       const x = f.col * TILE + TILE / 2
       const y = f.row * TILE + TILE / 2
       const life = f.ttl / (0.48)
+      // flames grow fast from the blast point (50ms) instead of popping in
+      const age = FLAME_DURATION / 1000 - f.ttl
+      const grow = Math.min(1, Math.max(0, age / 0.05))
       const flick = 0.85 + 0.15 * Math.sin(t * 30 + f.seed * 40)
-      const size = (TILE / 2 - 2) * Math.min(1, life * 3) * flick
+      const size = (TILE / 2 - 2) * Math.min(1, life * 3) * flick * grow
       const k = size / 64 // sprite scale (sprite radius = 64)
       ctx.save()
       ctx.translate(x, y)
@@ -503,6 +506,14 @@ export class Renderer {
       // flame blob (wobble approximated as scale jitter)
       const wob = 0.94 + 0.06 * Math.sin(t * 25 + f.seed * 20)
       ctx.drawImage(blob, -64 * k * wob, -64 * k * wob, 128 * k * wob, 128 * k * wob)
+      // white-hot core in the first 60ms of the blast
+      if (age >= 0 && age < 0.06) {
+        ctx.globalAlpha = (1 - age / 0.06) * 0.9
+        ctx.fillStyle = '#fff'
+        ctx.beginPath()
+        ctx.arc(0, 0, 26 * grow, 0, Math.PI * 2)
+        ctx.fill()
+      }
       ctx.restore()
     }
   }

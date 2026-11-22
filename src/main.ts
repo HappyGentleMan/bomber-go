@@ -19,6 +19,7 @@ let pendingOver = false
 let battleOpts = { aiPlayer2: false, attract: false }
 let lastTickSecond = -1
 let lastLives = -1 // life-loss flash detection in hudUpdate
+let lastKills = 0 // battle kill-flash detection in hudUpdate
 
 // ---------- online battle state ----------
 let netRole: 'none' | 'host' | 'client' = 'none'
@@ -614,6 +615,15 @@ function hudUpdate(view: Renderable) {
     hp.classList.add('hurt')
   }
   lastLives = view.mode === 'campaign' ? view.lives : -1
+  // battle: kill flash — bump the player chip when either kill count goes up
+  const kills = view.players.reduce((s, p) => s + (p.kills ?? 0), 0)
+  if (kills > lastKills) {
+    const hp = document.getElementById('hud-player')!
+    hp.classList.remove('bump')
+    void hp.offsetWidth // retrigger the bump animation
+    hp.classList.add('bump')
+  }
+  lastKills = kills
   if (!lastHudVisible) { lastHudVisible = true; fit() }
 }
 

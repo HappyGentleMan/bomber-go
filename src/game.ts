@@ -460,6 +460,7 @@ export class Game {
     this.particles.burst(cx, cy, p.color, 26, 220)
     this.particles.burst(cx, cy, '#ffffff', 12, 140)
     this.shake(10, 0.4)
+    this.hitStop(0.35, 0.1) // death slow-mo — the moment lands harder
     audio.play('hurt')
     haptic(90, 0.6, 0.9) // sharp double-thump feel for taking a hit
     if (this.mode === 'battle') {
@@ -950,6 +951,15 @@ export class Game {
     }
     this.state = 'battleover'
     this.winner = winner
+    // match-end celebration: full-screen tint + confetti on the winner's side
+    if (winner >= 0) {
+      const wp = this.players[winner]
+      const hex = winner === 0 ? '#00e5ff' : '#ff2e88'
+      this.flash(winner === 0 ? '0,229,255' : '255,46,136', 0.5, 0.8)
+      this.particles.burst(wp.x * 48 + 24, wp.y * 48 + 24, hex, 40, 300)
+      this.particles.burst(wp.x * 48 + 24, wp.y * 48 + 24, '#ffd54a', 30, 240)
+      this.hitStop(0.3, 0.15)
+    }
     this.emit('battleover', { winner, roundWins: [...this.roundWins] })
     if (winner >= 0) audio.play('levelClear')
     else audio.play('gameOver')

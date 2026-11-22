@@ -177,5 +177,15 @@ console.log('— Game keys ignored while an input field is focused —')
   ;(globalThis as any).document = { activeElement: null }
 }
 
+console.log('— Match end celebrates (flash + particles on the winner) —')
+{
+  const g = new Game('battle', { aiPlayer2: true, attract: true })
+  g.roundWins = [1, 0]
+  const flashBefore = g.getFlashAlpha()
+  g.endBattle(0)
+  check('match end flashes', g.getFlashAlpha() > flashBefore, `flash=${g.getFlashAlpha()}`)
+  check('match end spawns particles', g.particles.list.length > 0, `particles=${g.particles.list.length}`)
+}
+
 console.log(failures === 0 ? '\nALL AUDIT TESTS PASSED' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)
