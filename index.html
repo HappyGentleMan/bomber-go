@@ -274,6 +274,20 @@
       background: #0d1426; color: var(--neon); border: 2px solid rgba(0,229,255,.4); border-radius: 8px; padding: 8px;
     }
     input.code-input:focus { outline: none; border-color: var(--neon); box-shadow: 0 0 16px rgba(0,229,255,.3); }
+    /* host room-code tiles: one letter per box, readable across a room */
+    #room-code-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 4px 0 2px; }
+    .rc-label { font-size: 12px; letter-spacing: .3em; color: #bcd2ff; opacity: .85; }
+    .room-tiles { display: flex; gap: 10px; }
+    .room-tiles span {
+      display: grid; place-items: center;
+      width: min(58px, 13vw); aspect-ratio: 1;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: min(32px, 7vw); font-weight: 700; color: var(--neon);
+      background: rgba(0,229,255,.07);
+      border: 2px solid rgba(0,229,255,.55); border-radius: 12px;
+      box-shadow: 0 0 14px rgba(0,229,255,.22), inset 0 0 10px rgba(0,229,255,.08);
+      text-shadow: 0 0 8px rgba(0,229,255,.6);
+    }
     /* portrait phones: menus use the FULL screen (the canvas is a short
        strip in portrait, so menus must not be trapped in it or they scroll) */
     @media (orientation: portrait) and (max-width: 520px) {
@@ -417,10 +431,16 @@
           <button class="btn" data-action="back">BACK</button>
         </div>
         <div class="panel">
-          <div class="row">
+          <!-- host: the room code is the hero of this screen -->
+          <div id="room-code-box" class="hidden">
+            <div class="rc-label">SHARE THIS CODE</div>
+            <div class="room-tiles" id="room-tiles"></div>
+            <button class="btn primary" id="online-copy" style="min-width:150px" data-action="online-copy">COPY CODE</button>
+          </div>
+          <!-- join with code -->
+          <div class="row" id="join-row">
             <input class="code-input" id="online-code" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE" />
             <button class="btn" style="min-width:0; padding:10px 18px" data-action="online-join">JOIN</button>
-            <button class="btn hidden" id="online-copy" style="min-width:0; padding:10px 18px" data-action="online-copy">COPY CODE</button>
           </div>
           <div class="hint" id="online-status" style="margin-top:10px; letter-spacing:.08em"></div>
         </div>

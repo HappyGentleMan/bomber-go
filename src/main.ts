@@ -228,7 +228,7 @@ function leaveNet() {
   snapTimer = 0
   lastStateN = 0
   lastInputN = 0
-  ui.showOnlineCopy(false)
+  ui.showRoomCode(false)
   resetMatchState()
 }
 
@@ -243,8 +243,6 @@ function showPathBanner() {
   }, 3000)
 }
 
-let hostWaitHint: number | null = null
-
 function hostOnline() {
   if (netRole !== 'none') return
   net.onError = (msg) => {
@@ -252,20 +250,14 @@ function hostOnline() {
     if (!net.connected) leaveNet()
   }
   net.host()
-  ui.onlineStatus(`ROOM ${net.roomCode} — share the code, waiting for opponent…`)
-  ui.showOnlineCopy(true)
-  // nobody joined after 25s: most likely cross-network without a working relay,
-  // or iOS Safari WebRTC quirks (private relay / carrier NAT / iOS 26 Safari regression)
-  hostWaitHint = window.setTimeout(() => {
-    if (netRole === 'none')
-      ui.onlineStatus(`ROOM ${net.roomCode} — 等緊人… 朋友連唔到? 試: ①換 Chrome 開呢頁 ②關 iCloud Private Relay (設定 > 名 > iCloud) ③設定 > 流動數據 > 關「限制IP地址追蹤」 ④先試同一個WiFi`, 'err')
-  }, 25000)
+  ui.setRoomTiles(net.roomCode ?? '')
+  ui.showRoomCode(true)
+  ui.onlineStatus('WAITING FOR OPPONENT…')
   net.onOpen = () => {
-    if (hostWaitHint !== null) { window.clearTimeout(hostWaitHint); hostWaitHint = null }
     ui.onlineStatus(`OPPONENT CONNECTED — FIGHT!`, 'ok')
     netRole = 'host'
     resetMatchState()
-    ui.showOnlineCopy(false)
+    ui.showRoomCode(false)
     game = new Game('battle', { aiPlayer2: false })
     wireGame()
     appState = 'playing'
@@ -283,7 +275,7 @@ function joinOnline() {
   const code = ui.getOnlineCode()
   if (code.length < 4) { ui.onlineStatus('Enter the 5-letter room code first', 'err'); return }
   ui.onlineStatus(`Joining room ${code}…`)
-  ui.showOnlineCopy(false)
+  ui.showRoomCode(false)
   net.onError = (msg) => {
     ui.onlineStatus(msg, 'err')
     if (!net.connected) leaveNet()
@@ -292,7 +284,7 @@ function joinOnline() {
     ui.onlineStatus('CONNECTED — FIGHT!', 'ok')
     netRole = 'client'
     resetMatchState()
-    ui.showOnlineCopy(false)
+    ui.showRoomCode(false)
     remote = new RemoteGame()
     prevSnap = null
     game = null
@@ -439,11 +431,18 @@ ui.onAction = (action: string) => {
     case 'online': ui.show('online'); ui.menuIndex = 0; break
     case 'online-host': hostOnline(); break
     case 'online-join': joinOnline(); break
-    case 'online-copy':
+    case 'online-copy': {
+      const btn = document.getElementById('online-copy') as HTMLButtonElement | null
       navigator.clipboard?.writeText(net.roomCode ?? '')
-        .then(() => ui.onlineStatus('COPIED!', 'ok'))
+        .then(() => {
+          if (!btn) return
+          const old = btn.textContent
+          btn.textContent = 'COPIED ✓'
+          window.setTimeout(() => { btn.textContent = old }, 1500)
+        })
         .catch(() => ui.onlineStatus('COPY FAILED', 'err'))
       break
+    }
     case 'scores': ui.showScores(); ui.show('scores'); break
     case 'settings': ui.show('settings'); break
     case 'back':
@@ -744,7 +743,7 @@ const start = params.get('start')
 // ?join=CODE pre-fills the online room code and opens the join screen
 {
   const join = params.get('join')
-  if (join && /^[A-Z0-9]{4,5}$/i.test(join)) { ui.show('online'); ui.onlineCode(join.toUpperCase()) }
+  if (join && /^[A-Z0-9]{4,5}$/i.test(join)) { ui.show('online'); ui.showRoomCode(false); ui.onlineCode(join.toUpperCase()) }
 }
 let dbg: Game | null = null
 if (start === 'campaign') dbg = startCampaign()

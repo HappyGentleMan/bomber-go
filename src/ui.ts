@@ -130,10 +130,22 @@ export class UI {
     return el ? el.value.trim().toUpperCase() : ''
   }
 
-  showOnlineCopy(show: boolean) {
-    const el = $('online-copy')
+  showRoomCode(show: boolean) {
+    const box = $('room-code-box')
+    const row = $('join-row')
+    if (box) box.classList.toggle('hidden', !show)
+    if (row) row.classList.toggle('hidden', show)
+  }
+
+  setRoomTiles(code: string) {
+    const el = $('room-tiles')
     if (!el) return
-    el.classList.toggle('hidden', !show)
+    el.innerHTML = ''
+    for (const ch of code) {
+      const s = document.createElement('span')
+      s.textContent = ch
+      el.appendChild(s)
+    }
   }
 
   setRematchHidden(hidden: boolean) {
