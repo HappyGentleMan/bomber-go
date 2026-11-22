@@ -411,7 +411,12 @@ ui.onAction = (action: string) => {
     case 'campaign': startCampaign(); break
     case 'battle': ui.show('battle'); ui.menuIndex = 0; break
     case 'battle-1p': startBattle(true); break
-    case 'battle-2p': startBattle(false); break
+    case 'battle-2p':
+      startBattle(false)
+      // a touchscreen-only device cannot play P2 — warn before the fight
+      if (('ontouchstart' in window || navigator.maxTouchPoints > 0) && !input.keyboardSeen && !input.gamepadSeen)
+        ui.banner('P2 NEEDS A KEYBOARD OR GAMEPAD', 3)
+      break
     case 'online': ui.show('online'); ui.menuIndex = 0; break
     case 'online-host': hostOnline(); break
     case 'online-join': joinOnline(); break
@@ -457,11 +462,13 @@ function bindTouch(id: string, dir: Dir | null, bomb = false, det = false) {
     audio.ensure()
     if (bomb) input.setTouchBomb()
     else if (det) input.setTouchDetonate()
-    else input.setTouchDir(dir)
+    else input.dpadSet(dir!, true)
   }
   const off = (e: Event) => {
     e.preventDefault()
-    if (!bomb) input.setTouchDir(null)
+    if (bomb) return
+    if (det) input.setTouchDir(null) // pre-existing: releasing DET also clears movement
+    else input.dpadSet(dir!, false)
   }
   el.addEventListener('touchstart', on, { passive: false })
   el.addEventListener('touchend', off, { passive: false })
@@ -482,6 +489,7 @@ bindTouch('t-det', null, false, true)
 const JOY_TRAVEL = 44   // max knob travel from centre (px)
 const JOY_DEAD = 12     // deadzone (px) — below this, no direction
 let joyActive = false
+let joyPointer: number | null = null // which finger owns the joystick — the second finger must not steal it
 
 function joyUpdate(clientX: number, clientY: number) {
   const r = joyBase.getBoundingClientRect()
@@ -505,15 +513,25 @@ function joyEnd() {
 joyBase.addEventListener('pointerdown', (e: PointerEvent) => {
   e.preventDefault()
   audio.ensure()
+  if (joyActive) return // already tracked — ignore a second finger
   joyActive = true
+  joyPointer = e.pointerId
   try { joyBase.setPointerCapture(e.pointerId) } catch { /* synthetic pointers */ }
   joyUpdate(e.clientX, e.clientY)
 })
 joyBase.addEventListener('pointermove', (e: PointerEvent) => {
-  if (joyActive) joyUpdate(e.clientX, e.clientY)
+  if (joyActive && e.pointerId === joyPointer) joyUpdate(e.clientX, e.clientY)
 })
-joyBase.addEventListener('pointerup', joyEnd)
-joyBase.addEventListener('pointercancel', joyEnd)
+joyBase.addEventListener('pointerup', (e: PointerEvent) => {
+  if (e.pointerId !== joyPointer) return
+  joyPointer = null
+  joyEnd()
+})
+joyBase.addEventListener('pointercancel', (e: PointerEvent) => {
+  if (e.pointerId !== joyPointer) return
+  joyPointer = null
+  joyEnd()
+})
 
 document.getElementById('t-pause')!.addEventListener('touchstart', (e) => {
   e.preventDefault()
@@ -676,6 +694,11 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 // &level=N jumps campaign to level N (for theme/screenshot checks)
 const params = new URLSearchParams(location.search)
 const start = params.get('start')
+// ?join=CODE pre-fills the online room code and opens the join screen
+{
+  const join = params.get('join')
+  if (join && /^[A-Z0-9]{4,5}$/i.test(join)) { ui.show('online'); ui.onlineCode(join.toUpperCase()) }
+}
 let dbg: Game | null = null
 if (start === 'campaign') dbg = startCampaign()
 else if (start === 'battle') dbg = startBattle(params.get('ai') === '1')

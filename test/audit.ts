@@ -20,6 +20,7 @@ const { Game } = await import('../src/game.ts')
 const { updateSettings, settings } = await import('../src/storage.ts')
 const { MAX_POWERUPS_ON_FIELD } = await import('../src/constants.ts')
 const { RemoteGame, serializeGame, diffSnapshots } = await import('../src/netgame.ts')
+const { input } = await import('../src/input.ts')
 
 let failures = 0
 const check = (name: string, cond: boolean, extra = '') => {
@@ -154,6 +155,26 @@ console.log('— Round winner reaches the client via snapshot —')
   check('diff reports round winner to client', ev.roundWin === 0, `roundWin=${ev.roundWin}`)
   const ev2 = diffSnapshots(snap, { ...snap })
   check('no spurious round event on identical snapshots', ev2.roundWin === -1)
+}
+
+console.log('— Two-finger d-pad: latest press wins, release falls back —')
+{
+  input.dpadSet(1, true)   // left
+  check('dpad single press', input.getTouchDir() === 1)
+  input.dpadSet(2, true)   // left+down
+  check('dpad two fingers -> latest (down)', input.getTouchDir() === 2)
+  input.dpadSet(1, false)  // release left
+  check('dpad release falls back to down', input.getTouchDir() === 2)
+  input.dpadSet(2, false)
+  check('dpad all released -> null', input.getTouchDir() === null)
+}
+
+console.log('— Game keys ignored while an input field is focused —')
+{
+  ;(globalThis as any).document = { activeElement: { tagName: 'INPUT' } }
+  ;(input as any).onKeyDown({ code: 'Space', repeat: false, preventDefault: () => {} })
+  check('Space in an input does not bomb', (input as any).p1.bomb === false)
+  ;(globalThis as any).document = { activeElement: null }
 }
 
 console.log(failures === 0 ? '\nALL AUDIT TESTS PASSED' : `\n${failures} FAILURES`)

@@ -27,6 +27,19 @@ class InputManager {
   private touchDir: Dir | null = null
   private touchBomb = false
   private touchDetonate = false
+  /** d-pad buttons currently held, in press order — the newest finger wins */
+  private dpadOrder: Dir[] = []
+  /** true once a real key / gamepad has been seen — used to hint "P2 needs a keyboard" */
+  keyboardSeen = false
+  gamepadSeen = false
+
+  /** two-finger d-pad: press/release a direction; latest press wins, release falls back */
+  dpadSet(dir: Dir, active: boolean) {
+    if (active) { if (!this.dpadOrder.includes(dir)) this.dpadOrder.push(dir) }
+    else this.dpadOrder = this.dpadOrder.filter(d => d !== dir)
+    this.touchDir = this.dpadOrder.length ? this.dpadOrder[this.dpadOrder.length - 1] : null
+  }
+  getTouchDir(): Dir | null { return this.touchDir }
 
   attach() {
     window.addEventListener('keydown', this.onKeyDown)
@@ -40,10 +53,14 @@ class InputManager {
     window.removeEventListener('blur', this.onBlur)
   }
 
-  private onBlur = () => { this.down.clear(); this.touchDir = null }
+  private onBlur = () => { this.down.clear(); this.touchDir = null; this.dpadOrder = [] }
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.repeat) { e.preventDefault(); return }
+    this.keyboardSeen = true
+    // typing in a text field (room code, high-score name) must not drive the game
+    const ae = document.activeElement as HTMLElement | null
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return
     this.down.add(e.code)
 
     if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -88,6 +105,7 @@ class InputManager {
     // gamepad (first pad -> P1, second -> P2)
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : []
     const g1 = pads[0], g2 = pads[1]
+    if (g1 || g2) this.gamepadSeen = true
     const padDir = (p: Gamepad | null): Dir | null => {
       if (!p) return null
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0

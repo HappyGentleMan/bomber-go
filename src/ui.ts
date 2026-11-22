@@ -13,6 +13,7 @@ export class UI {
   menuScreen: HTMLElement | null = null
   savedScore = false
   private scoreRaf = 0
+  private bannerTimer = 0
 
   init() {
     document.querySelectorAll('[data-action]').forEach(btn => {
@@ -20,6 +21,12 @@ export class UI {
         audio.ensure()
         const a = (btn as HTMLElement).dataset.action!
         audio.play('menuSelect')
+        // a clicked menu button becomes the keyboard selection — no stale highlight
+        const menu = (btn as HTMLElement).closest('.menu')
+        if (menu) {
+          const i = [...menu.querySelectorAll('.btn')].indexOf(btn)
+          if (i >= 0) this.menuIndex = i
+        }
         this.onAction?.(a)
       })
     })
@@ -63,6 +70,14 @@ export class UI {
     })
     applyMove()
     this.applyTouchVisibility()
+    // online: Enter in the room-code field joins
+    const codeEl = $('online-code') as HTMLInputElement | null
+    codeEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        ;(document.querySelector('[data-action="online-join"]') as HTMLButtonElement)?.click()
+      }
+    })
   }
 
   applyTouchVisibility() {
@@ -90,6 +105,10 @@ export class UI {
     if (screen === 'title' || screen === 'battle' || screen === 'online') {
       const menu = $(screen === 'title' ? 'menu-main' : screen === 'battle' ? 'menu-battle' : 'menu-online')
       this.setMenu(menu)
+    } else {
+      // settings/scores/pause/over/clear/battleover have no menu — drop the stale selection
+      this.menuScreen = null
+      this.menuIndex = 0
     }
   }
 
@@ -108,6 +127,12 @@ export class UI {
   getOnlineCode(): string {
     const el = $('online-code') as HTMLInputElement | null
     return el ? el.value.trim().toUpperCase() : ''
+  }
+
+  showOnlineCopy(show: boolean) {
+    const el = $('online-copy')
+    if (!el) return
+    el.classList.toggle('hidden', !show)
   }
 
   setRematchHidden(hidden: boolean) {
@@ -145,7 +170,12 @@ export class UI {
     const el = $('banner')
     el.textContent = text
     el.classList.add('show')
-    window.setTimeout(() => el.classList.remove('show'), dur * 1000)
+    // shrink to fit so long messages don't clip on narrow screens
+    el.style.fontSize = ''
+    const ratio = el.clientWidth / el.scrollWidth
+    if (ratio < 1) el.style.fontSize = `${Math.max(12, Math.floor(ratio * parseFloat(getComputedStyle(el).fontSize)))}px`
+    if (this.bannerTimer) window.clearTimeout(this.bannerTimer)
+    this.bannerTimer = window.setTimeout(() => el.classList.remove('show'), dur * 1000)
   }
 
   hudSet(h: { score: number; level: number; timer: number; timerDanger: boolean; playerHtml: string } | null) {
@@ -192,6 +222,14 @@ export class UI {
     $('over-save').classList.toggle('hidden', !isNew)
     const inp = $('over-initials') as HTMLInputElement
     inp.value = ''
+    // Enter saves + closes the keyboard (mobile)
+    inp.onkeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        ;($('over-save') as HTMLButtonElement).click()
+        inp.blur()
+      }
+    }
     if (isNew) window.setTimeout(() => inp.focus(), 100)
   }
 
