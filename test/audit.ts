@@ -210,7 +210,7 @@ console.log('— Player colors —')
 console.log('— Character select —')
 {
   const { CHARACTERS } = await import('../src/constants.ts')
-  check('4 characters defined', CHARACTERS.length === 4 && CHARACTERS.includes('bomber') && CHARACTERS.includes('kitty') && CHARACTERS.includes('knight') && CHARACTERS.includes('ghost'), JSON.stringify(CHARACTERS))
+  check('5 characters defined', CHARACTERS.length === 5 && CHARACTERS.includes('bomber') && CHARACTERS.includes('kitty') && CHARACTERS.includes('knight') && CHARACTERS.includes('ghost') && CHARACTERS.includes('classic'), JSON.stringify(CHARACTERS))
   check('settings.character defaults to bomber', settings.character === 'bomber', `got ${settings.character}`)
   const g = new Game('battle', { aiPlayer2: true, attract: true })
   check('default char is bomber for both', g.players[0].char === 'bomber' && g.players[1].char === 'bomber', `${g.players[0].char}/${g.players[1].char}`)

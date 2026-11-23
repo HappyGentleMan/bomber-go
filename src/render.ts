@@ -89,6 +89,23 @@ function capPath(c: CanvasRenderingContext2D) {
  * (eyes/slits, gloves, feet) are drawn by drawPlayer on top.
  */
 export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: string) {
+  if (char === 'classic') {
+    // the original pre-redesign body: one rounded square, white top, color band
+    const g = c.createLinearGradient(0, -12, 0, 14)
+    g.addColorStop(0, '#ffffff')
+    g.addColorStop(0.25, color)
+    g.addColorStop(1, shade(color, -40))
+    c.fillStyle = g
+    roundRect(c, -13, -12, 26, 26, 9)
+    c.fill()
+    c.fillStyle = 'rgba(255,255,255,0.94)'
+    roundRect(c, -13, -14, 26, 14, 9)
+    c.fill()
+    c.fillStyle = color
+    c.fillRect(-13, -4, 26, 4)
+    return
+  }
+
   if (char === 'ghost') {
     // round blob with a wavy bottom (no torso/feet)
     const g = c.createLinearGradient(0, -11, 0, 6)

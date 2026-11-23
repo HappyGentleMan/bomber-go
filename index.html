@@ -280,7 +280,7 @@
     .swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .swatch { width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid rgba(255,255,255,.18); }
     .swatch.active { border-color: #fff; box-shadow: 0 0 12px currentColor; }
-    .chars { display: flex; gap: 8px; justify-content: flex-end; }
+    .chars { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
     .charopt { width: 44px; height: 44px; border-radius: 8px; cursor: pointer; border: 2px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); display: flex; align-items: center; justify-content: center; }
     .charopt.active { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.35); }
     .room-tiles { display: flex; gap: 10px; }
@@ -473,7 +473,7 @@
           <div class="tbtn" id="t-det">DETONATE</div>
         </div>
       </div>
-      <!-- pause lives at the canvas corner (not stacked above BOMB) -->
+      <!-- pause lives in the letterbox (outside the canvas) — see layoutTouch() -->
       <div class="tcluster" id="t-pause-wrap">
         <div class="tbtn" id="t-pause">II</div>
       </div>

@@ -104,6 +104,11 @@ function layoutTouch() {
     actions.style.top = `${Math.max(8, (window.innerHeight - actH) / 2)}px`
     actions.style.left = 'auto'
     actions.style.bottom = 'auto'
+    // pause: top of the right side bar — outside the canvas, thumb-reachable
+    pauseWrap.style.right = `${8 + safeR}px`
+    pauseWrap.style.top = '8px'
+    pauseWrap.style.left = 'auto'
+    pauseWrap.style.bottom = 'auto'
   } else {
     // portrait (or narrow): black bar below the canvas, above the home indicator
     moveEl.style.left = '14px'
@@ -114,13 +119,12 @@ function layoutTouch() {
     actions.style.bottom = `${Math.max(8 + safeB, (bottom - safeB) / 2 - actH / 2)}px`
     actions.style.top = 'auto'
     actions.style.left = 'auto'
+    // pause: top-right of the bottom bar — outside the canvas
+    pauseWrap.style.right = '14px'
+    pauseWrap.style.top = `${sr.bottom + 8}px`
+    pauseWrap.style.left = 'auto'
+    pauseWrap.style.bottom = 'auto'
   }
-  // pause: always at the canvas top-right corner — out of the action cluster,
-  // so it's reachable without moving the thumb off BOMB
-  pauseWrap.style.left = `${sr.right - 56}px`
-  pauseWrap.style.top = `${sr.top + 8}px`
-  pauseWrap.style.right = 'auto'
-  pauseWrap.style.bottom = 'auto'
 }
 
 function fit() {
