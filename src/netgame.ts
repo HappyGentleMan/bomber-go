@@ -19,7 +19,7 @@ export function serializeGame(g: Game): any {
       p.bombs, p.flame, +p.speed.toFixed(2),
       +p.shieldUntil.toFixed(2), +p.invincibleUntil.toFixed(2),
       +p.wallpassUntil.toFixed(2), +p.frozenUntil.toFixed(2),
-      p.kills, p.respawnIn,
+      p.kills, p.respawnIn, p.color,
     ]),
     bombs: g.bombs.map(b => [b.id, b.col, b.row, Math.round(b.fuse), b.power, b.owner, +b.x.toFixed(3), +b.y.toFixed(3), b.sliding, +b.born.toFixed(2)]),
     flames: g.flames.map(f => [f.col, f.row, f.dir, +f.ttl.toFixed(3), f.seed]),
@@ -134,8 +134,8 @@ export class RemoteGame {
         shieldUntil: p[8], invincibleUntil: p[9],
         wallpassUntil: p[10], frozenUntil: p[11],
         kills: p[12], respawnIn: p[13],
-        movingDir: null, stepTimer: 0,
-        color: i === 0 ? '#00e5ff' : '#ff2e88',
+        movingDir: null, stepTimer: 0, trailTimer: 0,
+        color: p[14] ?? (i === 0 ? '#00e5ff' : '#ff2e88'),
       }
     })
     const oldBMap = new Map(oldB.map((bb: any) => [bb.id, bb]))

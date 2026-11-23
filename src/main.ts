@@ -5,7 +5,7 @@ import { input } from './input'
 import { audio } from './audio'
 import { net } from './net'
 import { serializeGame, RemoteGame, diffSnapshots } from './netgame'
-import { CANVAS_W, CANVAS_H, POWERUP_DEFS } from './constants'
+import { CANVAS_W, CANVAS_H, POWERUP_DEFS, PLAYER_COLORS } from './constants'
 import { isHighScore, settings } from './storage'
 import type { Dir, PowerupKind } from './constants'
 
@@ -181,7 +181,7 @@ function resetMatchState() {
 }
 
 function startCampaign(): Game {
-  game = new Game('campaign')
+  game = new Game('campaign', { p1Color: settings.color })
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -194,7 +194,7 @@ function startCampaign(): Game {
 }
 
 function startBattle(aiP2: boolean): Game {
-  game = new Game('battle', { aiPlayer2: aiP2 })
+  game = new Game('battle', { aiPlayer2: aiP2, p1Color: settings.color })
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -208,7 +208,7 @@ function startBattle(aiP2: boolean): Game {
 }
 
 function startAttract() {
-  game = new Game('battle', { aiPlayer2: true, attract: true })
+  game = new Game('battle', { aiPlayer2: true, attract: true, p1Color: settings.color })
   resetMatchState()
   wireGame()
   appState = 'title'
@@ -258,7 +258,7 @@ function hostOnline() {
     netRole = 'host'
     resetMatchState()
     ui.showRoomCode(false)
-    game = new Game('battle', { aiPlayer2: false })
+    game = new Game('battle', { aiPlayer2: false, p1Color: settings.color })
     wireGame()
     appState = 'playing'
     lastTickSecond = -1
@@ -294,12 +294,24 @@ function joinOnline() {
     ui.banner('FIGHT!', 1.5)
     audio.setTrack('battle')
     audio.ensure()
+    net.send({ t: 'hello', c: settings.color }) // tell the host our color
   }
   net.join(code)
 }
 
+/** host: apply the client's chosen color to player 1 (live + on respawn) */
+function applyRemoteColor(c: string) {
+  if (!game || !PLAYER_COLORS.includes(c)) return
+  game.playerColors[1] = c === settings.color ? '#ffd54a' : c // no same-color matches
+  if (game.players[1]) game.players[1].color = game.playerColors[1]
+}
+
 /** host: receive the client's input; both: handle drop-offs */
 net.onMessage = (m) => {
+  if (m.t === 'hello' && netRole === 'host') {
+    applyRemoteColor(m.c)
+    return
+  }
   if (m.t === 'input' && netRole === 'host') {
     if (m.n <= lastInputN) return // unordered channel: stale input
     lastInputN = m.n
@@ -415,6 +427,13 @@ function resume() {
   appState = 'playing'
   ui.show(null)
   audio.setTrack(game && game.mode === 'battle' ? 'battle' : 'game')
+}
+
+// live preview of the color choice (title demo + in-game P1)
+ui.onColorChange = (c) => {
+  if (!game) return
+  game.playerColors[0] = c
+  if (game.players[0]) game.players[0].color = c
 }
 
 ui.onAction = (action: string) => {
@@ -596,8 +615,8 @@ function hudUpdate(view: Renderable) {
   } else {
     const p2 = view.players[1]
     const rp = (n: number) => (n >= 2 ? '●●' : n === 1 ? '●○' : '○○')
-    playerHtml = `<span style="color:#00e5ff">P1 ${rp(view.roundWins[0])} ⚔${p.kills}</span>
-      <span style="color:#ff2e88">P2 ${rp(view.roundWins[1])} ⚔${p2?.kills ?? 0}</span>`
+    playerHtml = `<span style="color:${view.players[0]?.color ?? '#00e5ff'}">P1 ${rp(view.roundWins[0])} ⚔${p.kills}</span>
+      <span style="color:${view.players[1]?.color ?? '#ff2e88'}">P2 ${rp(view.roundWins[1])} ⚔${p2?.kills ?? 0}</span>`
   }
   ui.hudSet({
     score: view.mode === 'campaign' ? view.score : view.players[0].kills * 1000 + view.players[1].kills * 1000,

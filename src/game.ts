@@ -70,6 +70,8 @@ export class Game {
   roundWins: [number, number] = [0, 0] // battle: rounds won per player
   lastRoundWin = -1             // battle: winner of the round that just ended (-1 = none)
   bombId = 1
+  // player colors (P1 is customizable via settings; P2 fixed, with collision avoidance)
+  playerColors: [string, string] = ['#00e5ff', '#ff2e88']
   exitTimer = 0
   particles = new Particles()
   shakeMag = 0
@@ -87,13 +89,18 @@ export class Game {
 
   onEvent: ((ev: string, data?: any) => void) | null = null
 
-  constructor(mode: 'campaign' | 'battle', opts: { aiPlayer2?: boolean; attract?: boolean } = {}) {
+  constructor(mode: 'campaign' | 'battle', opts: { aiPlayer2?: boolean; attract?: boolean; p1Color?: string } = {}) {
     this.mode = mode
     this.attract = opts.attract ?? false
     this.levelTime = mode === 'campaign' ? LEVEL_TIME : BATTLE_TIME
     this.def = mode === 'campaign' ? generateLevel(1) : generateBattleMap()
     this.grid = this.def.grid
     this.powerups = this.def.powerups.map(u => ({ ...u, born: 0, revealed: false }))
+    if (opts.p1Color) {
+      this.playerColors[0] = opts.p1Color
+      // collision avoidance: P2 is fixed to pink, so move it if P1 took pink
+      if (opts.p1Color === '#ff2e88') this.playerColors[1] = '#ffd54a'
+    }
     this.spawnPlayers(opts.aiPlayer2 ?? false)
     if (mode === 'battle') this.exit = { col: -1, row: -1, revealed: false }
     else { this.exit = { col: this.def.exitCol, row: this.def.exitRow, revealed: false }; this.spawnEnemies() }
@@ -140,9 +147,9 @@ export class Game {
       bombs: 1, flame: 1,
       shieldUntil: 0, invincibleUntil: 0, wallpassUntil: 0,
       frozenUntil: 0,
-      alive: true, respawnIn: 0, stepTimer: 0,
+      alive: true, respawnIn: 0, stepTimer: 0, trailTimer: 0,
       score: 0, kills: 0,
-      color: id === 0 ? '#00e5ff' : '#ff2e88',
+      color: this.playerColors[id],
     }
   }
 
@@ -302,6 +309,12 @@ export class Game {
           p.stepTimer = 0.22
           const c = this.particles.tileCenter(p.col, p.row)
           this.particles.dust(c.x, c.y + 12)
+        }
+        // colored movement trail (subtle, in the player's own color)
+        p.trailTimer -= dt
+        if (p.trailTimer <= 0) {
+          p.trailTimer = 0.09
+          this.particles.trail(p.x * 48 + 24, p.y * 48 + 34, p.color)
         }
       }
       this.pickupPowerups(p)

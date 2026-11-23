@@ -76,6 +76,16 @@ export class Particles {
     }
   }
 
+  /** movement trail: a small fading dot in the player's color */
+  trail(x: number, y: number, color: string) {
+    this.list.push({
+      x: x + (Math.random() - 0.5) * 6, y: y + (Math.random() - 0.5) * 6,
+      vx: 0, vy: 0,
+      life: 0, maxLife: 0.35, size: 4,
+      color, kind: 'spark', grav: 0,
+    })
+  }
+
   text(cx: number, cy: number, text: string, color = '#ffd54a') {
     this.list.push({
       x: cx, y: cy, vx: 0, vy: -50,

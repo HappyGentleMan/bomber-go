@@ -187,5 +187,25 @@ console.log('— Match end celebrates (flash + particles on the winner) —')
   check('match end spawns particles', g.particles.list.length > 0, `particles=${g.particles.list.length}`)
 }
 
+console.log('— Player colors —')
+{
+  const g = new Game('campaign')
+  check('default P1 color is cyan', g.players[0].color === '#00e5ff', `got ${g.players[0].color}`)
+  const g2 = new Game('campaign', { p1Color: '#b388ff' })
+  check('p1Color option applies to P1', g2.players[0].color === '#b388ff', `got ${g2.players[0].color}`)
+  const g3 = new Game('battle', { aiPlayer2: true, attract: true, p1Color: '#ff2e88' })
+  check('pink P1 -> P2 switches to gold', g3.players[1].color === '#ffd54a', `got ${g3.players[1].color}`)
+  const g4 = new Game('battle', { aiPlayer2: true, attract: true, p1Color: '#00e5ff' })
+  check('non-pink P1 -> P2 stays pink', g4.players[1].color === '#ff2e88', `got ${g4.players[1].color}`)
+  // snapshot round-trip carries colors
+  const g5 = new Game('battle', { aiPlayer2: true, attract: true, p1Color: '#ffd54a' })
+  const rg = new RemoteGame()
+  rg.apply(serializeGame(g5))
+  check('snapshot carries player colors', rg.players[0].color === '#ffd54a' && rg.players[1].color === '#ff2e88',
+    `got ${rg.players[0].color}/${rg.players[1].color}`)
+  // settings default
+  check('settings.color defaults to cyan', settings.color === '#00e5ff', `got ${settings.color}`)
+}
+
 console.log(failures === 0 ? '\nALL AUDIT TESTS PASSED' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

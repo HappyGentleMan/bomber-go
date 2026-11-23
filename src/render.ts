@@ -125,7 +125,7 @@ export class Renderer {
     this.drawPowerups(ctx, game, t)
     game.particles.draw(ctx, 'smoke')
     this.drawFlames(ctx, game, t)
-    for (const b of game.bombs) this.drawBomb(ctx, b, t, alpha)
+    for (const b of game.bombs) this.drawBomb(ctx, b, t, game.players[b.owner]?.color ?? null, alpha)
     for (const e of game.enemies) if (e.alive) this.drawEnemy(ctx, e, t, game.time, alpha)
     for (const p of game.players) if (p.alive) this.drawPlayer(ctx, p, t, game, alpha)
     game.particles.draw(ctx)
@@ -405,7 +405,7 @@ export class Renderer {
     return cv
   }
 
-  private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number, alpha = 1) {
+  private drawBomb(ctx: CanvasRenderingContext2D, b: BombState, t: number, ownerColor: string | null, alpha = 1) {
     const pos = lerpPos(b, alpha)
     const x = pos.x * TILE + TILE / 2
     const y = pos.y * TILE + TILE / 2
@@ -422,8 +422,8 @@ export class Renderer {
     // body (pre-rendered)
     ctx.drawImage(this.getBombSprite(), -20, -20, 40, 40)
     // owner ring
-    if (b.owner === 0) ctx.strokeStyle = 'rgba(0,229,255,0.8)'
-    else if (b.owner === 1) ctx.strokeStyle = 'rgba(255,46,136,0.8)'
+    // owner ring (the owner's own color; sudden-death bombs stay red)
+    if (b.owner >= 0 && ownerColor) ctx.strokeStyle = ownerColor + 'cc'
     else ctx.strokeStyle = 'rgba(255,80,80,0.9)'
     ctx.lineWidth = 2
     ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.stroke()

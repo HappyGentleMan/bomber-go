@@ -1,5 +1,6 @@
 import { audio } from './audio'
 import { settings, updateSettings, getScores, isHighScore, addScore } from './storage'
+import { PLAYER_COLORS } from './constants'
 
 type Screen = 'title' | 'battle' | 'online' | 'settings' | 'scores' | 'pause' | 'over' | 'clear' | 'battleover'
 
@@ -9,6 +10,7 @@ export class UI {
   screen: Screen | null = 'title'
   hud: { score: number; level: number; timer: number; timerDanger: boolean; playerHtml: string } | null = null
   onAction: ((action: string) => void) | null = null
+  onColorChange: ((color: string) => void) | null = null
   menuIndex = 0
   menuScreen: HTMLElement | null = null
   savedScore = false
@@ -70,6 +72,24 @@ export class UI {
       audio.play('menuSelect')
     })
     applyMove()
+    // color swatches
+    const colorRow = $('set-color')
+    if (colorRow) {
+      for (const c of PLAYER_COLORS) {
+        const s = document.createElement('div')
+        s.className = 'swatch' + (c === settings.color ? ' active' : '')
+        s.style.background = c
+        s.style.color = c
+        s.addEventListener('click', () => {
+          settings.color = c
+          updateSettings({ color: c })
+          colorRow.querySelectorAll('.swatch').forEach(x => x.classList.toggle('active', (x as HTMLElement) === s))
+          audio.play('menuSelect')
+          this.onColorChange?.(c)
+        })
+        colorRow.appendChild(s)
+      }
+    }
     this.applyTouchVisibility()
     // online: Enter in the room-code field joins
     const codeEl = $('online-code') as HTMLInputElement | null

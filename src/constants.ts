@@ -39,6 +39,9 @@ export const PLAYER_MAX_SPEED_LEVELS = 4
 export const BOMB_FUSE = 2600 // ms
 export const BOMB_FUSE_MIN = 1700
 export const FLAME_DURATION = 480 // ms
+
+/** player color palette (all pop on the dark bg) */
+export const PLAYER_COLORS = ['#00e5ff', '#ff2e88', '#ffd54a', '#7dff5e', '#b388ff', '#ff9840', '#4aa8ff', '#5effd0']
 export const SPAWN_INVULN = 1600 // ms
 export const SHIELD_DURATION = 10_000
 export const INVINCIBLE_DURATION = 8_000
