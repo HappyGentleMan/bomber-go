@@ -280,6 +280,9 @@
     .swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .swatch { width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid rgba(255,255,255,.18); }
     .swatch.active { border-color: #fff; box-shadow: 0 0 12px currentColor; }
+    .chars { display: flex; gap: 8px; justify-content: flex-end; }
+    .charopt { width: 44px; height: 44px; border-radius: 8px; cursor: pointer; border: 2px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); display: flex; align-items: center; justify-content: center; }
+    .charopt.active { border-color: #fff; box-shadow: 0 0 12px rgba(255,255,255,.35); }
     .room-tiles { display: flex; gap: 10px; }
     .room-tiles span {
       display: grid; place-items: center;
@@ -364,6 +367,7 @@
           <div class="setting-row"><label>Touch Controls</label><div class="toggle" id="set-touch"></div></div>
           <div class="setting-row"><label id="set-move-label">MOVE: JOYSTICK</label><div class="toggle on" id="set-move"></div></div>
           <div class="setting-row"><label>COLOR</label><div class="swatches" id="set-color"></div></div>
+          <div class="setting-row"><label>CHARACTER</label><div class="chars" id="set-char"></div></div>
         </div>
         <div class="hint" style="letter-spacing:.25em; margin-top:10px">POWER-UPS</div>
         <div class="panel" id="powerup-legend" style="text-align:left; max-height:38vh; overflow-y:auto; width:100%"></div>

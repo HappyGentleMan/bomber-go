@@ -5,7 +5,7 @@ import { input } from './input'
 import { audio } from './audio'
 import { net } from './net'
 import { serializeGame, RemoteGame, diffSnapshots } from './netgame'
-import { CANVAS_W, CANVAS_H, POWERUP_DEFS, PLAYER_COLORS } from './constants'
+import { CANVAS_W, CANVAS_H, POWERUP_DEFS, PLAYER_COLORS, CHARACTERS } from './constants'
 import { isHighScore, settings } from './storage'
 import type { Dir, PowerupKind } from './constants'
 
@@ -182,7 +182,7 @@ function resetMatchState() {
 }
 
 function startCampaign(): Game {
-  game = new Game('campaign', { p1Color: settings.color })
+  game = new Game('campaign', { p1Color: settings.color, p1Char: settings.character })
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -195,7 +195,7 @@ function startCampaign(): Game {
 }
 
 function startBattle(aiP2: boolean): Game {
-  game = new Game('battle', { aiPlayer2: aiP2, p1Color: settings.color })
+  game = new Game('battle', { aiPlayer2: aiP2, p1Color: settings.color, p1Char: settings.character })
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -209,7 +209,7 @@ function startBattle(aiP2: boolean): Game {
 }
 
 function startAttract() {
-  game = new Game('battle', { aiPlayer2: true, attract: true, p1Color: settings.color })
+  game = new Game('battle', { aiPlayer2: true, attract: true, p1Color: settings.color, p1Char: settings.character })
   resetMatchState()
   wireGame()
   appState = 'title'
@@ -259,7 +259,7 @@ function hostOnline() {
     netRole = 'host'
     resetMatchState()
     ui.showRoomCode(false)
-    game = new Game('battle', { aiPlayer2: false, p1Color: settings.color })
+    game = new Game('battle', { aiPlayer2: false, p1Color: settings.color, p1Char: settings.character })
     wireGame()
     appState = 'playing'
     lastTickSecond = -1
@@ -295,22 +295,28 @@ function joinOnline() {
     ui.banner('FIGHT!', 1.5)
     audio.setTrack('battle')
     audio.ensure()
-    net.send({ t: 'hello', c: settings.color }) // tell the host our color
+    net.send({ t: 'hello', c: settings.color, ch: settings.character }) // tell the host our identity
   }
   net.join(code)
 }
 
-/** host: apply the client's chosen color to player 1 (live + on respawn) */
-function applyRemoteColor(c: string) {
-  if (!game || !PLAYER_COLORS.includes(c)) return
-  game.playerColors[1] = c === settings.color ? '#ffd54a' : c // no same-color matches
-  if (game.players[1]) game.players[1].color = game.playerColors[1]
+/** host: apply the client's chosen color + character to player 1 (live + on respawn) */
+function applyRemoteColor(c: string, ch?: string) {
+  if (!game) return
+  if (c && PLAYER_COLORS.includes(c)) {
+    game.playerColors[1] = c === settings.color ? '#ffd54a' : c // no same-color matches
+    if (game.players[1]) game.players[1].color = game.playerColors[1]
+  }
+  if (ch && (CHARACTERS as readonly string[]).includes(ch)) {
+    game.playerChars[1] = ch
+    if (game.players[1]) game.players[1].char = ch
+  }
 }
 
 /** host: receive the client's input; both: handle drop-offs */
 net.onMessage = (m) => {
   if (m.t === 'hello' && netRole === 'host') {
-    applyRemoteColor(m.c)
+    applyRemoteColor(m.c, m.ch)
     return
   }
   if (m.t === 'input' && netRole === 'host') {
@@ -435,6 +441,13 @@ ui.onColorChange = (c) => {
   if (!game) return
   game.playerColors[0] = c
   if (game.players[0]) game.players[0].color = c
+}
+
+// live preview of the character choice (title demo + in-game P1)
+ui.onCharChange = (ch) => {
+  if (!game) return
+  game.playerChars[0] = ch
+  if (game.players[0]) game.players[0].char = ch
 }
 
 ui.onAction = (action: string) => {

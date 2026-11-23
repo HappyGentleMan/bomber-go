@@ -39,6 +39,7 @@ export interface PlayerState {
   respawnIn: number
   stepTimer: number
   trailTimer: number
+  char: string
   score: number
   kills: number
   color: string

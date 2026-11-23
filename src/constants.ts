@@ -42,6 +42,10 @@ export const FLAME_DURATION = 480 // ms
 
 /** player color palette (all pop on the dark bg) */
 export const PLAYER_COLORS = ['#00e5ff', '#ff2e88', '#ffd54a', '#7dff5e', '#b388ff', '#ff9840', '#4aa8ff', '#5effd0']
+
+/** character model ids (procedural, tinted by PLAYER_COLORS) */
+export const CHARACTERS = ['bomber', 'kitty', 'knight', 'ghost'] as const
+export type CharacterId = (typeof CHARACTERS)[number]
 export const SPAWN_INVULN = 1600 // ms
 export const SHIELD_DURATION = 10_000
 export const INVINCIBLE_DURATION = 8_000

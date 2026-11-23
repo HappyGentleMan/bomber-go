@@ -1,6 +1,7 @@
 import { audio } from './audio'
 import { settings, updateSettings, getScores, isHighScore, addScore } from './storage'
-import { PLAYER_COLORS } from './constants'
+import { PLAYER_COLORS, CHARACTERS } from './constants'
+import { drawCharBody } from './render'
 
 type Screen = 'title' | 'battle' | 'online' | 'settings' | 'scores' | 'pause' | 'over' | 'clear' | 'battleover'
 
@@ -11,6 +12,7 @@ export class UI {
   hud: { score: number; level: number; timer: number; timerDanger: boolean; playerHtml: string } | null = null
   onAction: ((action: string) => void) | null = null
   onColorChange: ((color: string) => void) | null = null
+  onCharChange: ((char: string) => void) | null = null
   menuIndex = 0
   menuScreen: HTMLElement | null = null
   savedScore = false
@@ -86,9 +88,32 @@ export class UI {
           colorRow.querySelectorAll('.swatch').forEach(x => x.classList.toggle('active', (x as HTMLElement) === s))
           audio.play('menuSelect')
           this.onColorChange?.(c)
+          this.renderCharPreviews() // re-tint the character previews
         })
         colorRow.appendChild(s)
       }
+    }
+    // character picks (mini canvas previews in the current color)
+    const charRow = $('set-char')
+    if (charRow) {
+      for (const ch of CHARACTERS) {
+        const s = document.createElement('div')
+        s.className = 'charopt' + (ch === settings.character ? ' active' : '')
+        s.dataset.char = ch
+        const cv = document.createElement('canvas')
+        cv.width = 64; cv.height = 64
+        cv.style.width = '32px'; cv.style.height = '32px'
+        s.appendChild(cv)
+        s.addEventListener('click', () => {
+          settings.character = ch
+          updateSettings({ character: ch })
+          charRow.querySelectorAll('.charopt').forEach(x => x.classList.toggle('active', (x as HTMLElement) === s))
+          audio.play('menuSelect')
+          this.onCharChange?.(ch)
+        })
+        charRow.appendChild(s)
+      }
+      this.renderCharPreviews()
     }
     this.applyTouchVisibility()
     // online: Enter in the room-code field joins
@@ -98,6 +123,23 @@ export class UI {
         e.preventDefault()
         ;(document.querySelector('[data-action="online-join"]') as HTMLButtonElement)?.click()
       }
+    })
+  }
+
+  /** re-tint the character preview canvases with the currently selected color */
+  renderCharPreviews() {
+    const row = $('set-char')
+    if (!row) return
+    row.querySelectorAll('.charopt').forEach(el => {
+      const ch = (el as HTMLElement).dataset.char!
+      const cv = el.querySelector('canvas')!
+      const c = cv.getContext('2d')!
+      c.clearRect(0, 0, 64, 64)
+      c.save()
+      c.scale(2, 2)
+      c.translate(16, 16)
+      drawCharBody(c, ch, settings.color)
+      c.restore()
     })
   }
 

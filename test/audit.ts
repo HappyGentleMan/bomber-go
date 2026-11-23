@@ -207,5 +207,23 @@ console.log('— Player colors —')
   check('settings.color defaults to cyan', settings.color === '#00e5ff', `got ${settings.color}`)
 }
 
+console.log('— Character select —')
+{
+  const { CHARACTERS } = await import('../src/constants.ts')
+  check('4 characters defined', CHARACTERS.length === 4 && CHARACTERS.includes('bomber') && CHARACTERS.includes('kitty') && CHARACTERS.includes('knight') && CHARACTERS.includes('ghost'), JSON.stringify(CHARACTERS))
+  check('settings.character defaults to bomber', settings.character === 'bomber', `got ${settings.character}`)
+  const g = new Game('battle', { aiPlayer2: true, attract: true })
+  check('default char is bomber for both', g.players[0].char === 'bomber' && g.players[1].char === 'bomber', `${g.players[0].char}/${g.players[1].char}`)
+  const g2 = new Game('battle', { aiPlayer2: true, attract: true, p1Char: 'kitty' })
+  check('p1Char applies to P1 only', g2.players[0].char === 'kitty' && g2.players[1].char === 'bomber', `${g2.players[0].char}/${g2.players[1].char}`)
+  const g3 = new Game('battle', { aiPlayer2: true, attract: true, p1Char: 'nope' })
+  check('invalid p1Char ignored', g3.players[0].char === 'bomber', g3.players[0].char)
+  // snapshot round-trip carries char
+  const g4 = new Game('battle', { aiPlayer2: true, attract: true, p1Char: 'ghost' })
+  const rg = new RemoteGame()
+  rg.apply(serializeGame(g4))
+  check('snapshot carries chars', rg.players[0].char === 'ghost' && rg.players[1].char === 'bomber', `${rg.players[0].char}/${rg.players[1].char}`)
+}
+
 console.log(failures === 0 ? '\nALL AUDIT TESTS PASSED' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

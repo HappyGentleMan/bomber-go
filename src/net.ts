@@ -22,7 +22,7 @@ import { Peer, type DataConnection } from 'peerjs'
 export type NetMsg =
   | { t: 'input'; n: number; dir: number | null; bomb: boolean; detonate: boolean }
   | { t: 'state'; n: number; s: any }
-  | { t: 'hello'; c: string }
+  | { t: 'hello'; c: string; ch?: string }
   | { t: 'bye' }
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

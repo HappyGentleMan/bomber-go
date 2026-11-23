@@ -5,7 +5,7 @@ import {
   SHIELD_DURATION, INVINCIBLE_DURATION, WALLPASS_DURATION, FREEZE_DURATION,
   MAX_BOMBS, MAX_FLAME, START_LIVES, LEVEL_TIME, BATTLE_TIME, BATTLE_ROUND_TARGET,
   POWERUP_DEFS, POWERUP_KINDS, POWERUP_DROP_CHANCE, MAX_POWERUPS_ON_FIELD,
-  ENEMY_SPEED_SCALE,
+  ENEMY_SPEED_SCALE, CHARACTERS,
 } from './constants'
 import type { Dir } from './constants'
 import type {
@@ -72,6 +72,8 @@ export class Game {
   bombId = 1
   // player colors (P1 is customizable via settings; P2 fixed, with collision avoidance)
   playerColors: [string, string] = ['#00e5ff', '#ff2e88']
+  // character models (P1 customizable via settings; P2 default bomber)
+  playerChars: [string, string] = ['bomber', 'bomber']
   exitTimer = 0
   particles = new Particles()
   shakeMag = 0
@@ -89,7 +91,7 @@ export class Game {
 
   onEvent: ((ev: string, data?: any) => void) | null = null
 
-  constructor(mode: 'campaign' | 'battle', opts: { aiPlayer2?: boolean; attract?: boolean; p1Color?: string } = {}) {
+  constructor(mode: 'campaign' | 'battle', opts: { aiPlayer2?: boolean; attract?: boolean; p1Color?: string; p1Char?: string } = {}) {
     this.mode = mode
     this.attract = opts.attract ?? false
     this.levelTime = mode === 'campaign' ? LEVEL_TIME : BATTLE_TIME
@@ -101,6 +103,7 @@ export class Game {
       // collision avoidance: P2 is fixed to pink, so move it if P1 took pink
       if (opts.p1Color === '#ff2e88') this.playerColors[1] = '#ffd54a'
     }
+    if (opts.p1Char && (CHARACTERS as readonly string[]).includes(opts.p1Char)) this.playerChars[0] = opts.p1Char
     this.spawnPlayers(opts.aiPlayer2 ?? false)
     if (mode === 'battle') this.exit = { col: -1, row: -1, revealed: false }
     else { this.exit = { col: this.def.exitCol, row: this.def.exitRow, revealed: false }; this.spawnEnemies() }
@@ -150,6 +153,7 @@ export class Game {
       alive: true, respawnIn: 0, stepTimer: 0, trailTimer: 0,
       score: 0, kills: 0,
       color: this.playerColors[id],
+      char: this.playerChars[id],
     }
   }
 

@@ -59,6 +59,127 @@ function lerpPos(p: { x: number; y: number; prevX?: number; prevY?: number }, al
   return { x: px + dx * alpha, y: py + dy * alpha }
 }
 
+/** head dome outline (flat bottom at y=4, rounded top) */
+function domePath(c: CanvasRenderingContext2D) {
+  c.beginPath()
+  c.moveTo(-12, 4)
+  c.lineTo(-12, -5)
+  c.arcTo(-12, -15, -2, -15, 10)
+  c.lineTo(2, -15)
+  c.arcTo(12, -15, 12, -5, 10)
+  c.lineTo(12, 4)
+  c.closePath()
+}
+
+/** white helmet cap outline (dome clipped at y=-6) */
+function capPath(c: CanvasRenderingContext2D) {
+  c.beginPath()
+  c.moveTo(-12, -6)
+  c.lineTo(-12, -5)
+  c.arcTo(-12, -15, -2, -15, 10)
+  c.lineTo(2, -15)
+  c.arcTo(12, -15, 12, -5, 10)
+  c.lineTo(12, -6)
+  c.closePath()
+}
+
+/**
+ * Draw the STATIC parts of a character's body in a 32×32 box.
+ * ctx must be translated so (0,0) is the box center. Live parts
+ * (eyes/slits, gloves, feet) are drawn by drawPlayer on top.
+ */
+export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: string) {
+  if (char === 'ghost') {
+    // round blob with a wavy bottom (no torso/feet)
+    const g = c.createLinearGradient(0, -11, 0, 6)
+    g.addColorStop(0, shade(color, 40))
+    g.addColorStop(1, shade(color, -30))
+    c.globalAlpha = 0.96
+    c.fillStyle = g
+    c.beginPath()
+    c.arc(0, 0, 12, Math.PI, 0) // top half
+    c.quadraticCurveTo(9, 7, 6, 1)
+    c.quadraticCurveTo(3, 7, 0, 1)
+    c.quadraticCurveTo(-3, 7, -6, 1)
+    c.quadraticCurveTo(-9, 7, -12, 1)
+    c.closePath()
+    c.fill()
+    c.globalAlpha = 1
+    // top highlight
+    c.fillStyle = 'rgba(255,255,255,0.25)'
+    c.beginPath(); c.ellipse(-4, -6, 5, 3, -0.4, 0, Math.PI * 2); c.fill()
+    return
+  }
+
+  // shared torso (bomber / kitty / knight)
+  const bodyG = c.createLinearGradient(0, 3, 0, 14)
+  bodyG.addColorStop(0, shade(color, 25))
+  bodyG.addColorStop(1, shade(color, -45))
+  c.fillStyle = bodyG
+  roundRect(c, -10, 3, 20, 11, 5)
+  c.fill()
+  // belly plate
+  c.fillStyle = 'rgba(255,255,255,0.18)'
+  roundRect(c, -5.5, 6, 11, 6.5, 3)
+  c.fill()
+
+  if (char === 'knight') {
+    // feather plume behind the head
+    c.fillStyle = shade(color, -20)
+    c.beginPath()
+    c.moveTo(0, -12)
+    c.quadraticCurveTo(3, -20, 10, -18)
+    c.quadraticCurveTo(5, -15, 4, -10)
+    c.closePath()
+    c.fill()
+    // full white helmet over the whole dome
+    c.fillStyle = 'rgba(255,255,255,0.95)'
+    domePath(c)
+    c.fill()
+    // dark visor band (slits drawn live)
+    c.fillStyle = 'rgba(13,19,34,0.92)'
+    roundRect(c, -10, -4, 20, 8, 4)
+    c.fill()
+    return
+  }
+
+  // colored head dome (bomber, kitty)
+  const headG = c.createLinearGradient(0, -15, 0, 4)
+  headG.addColorStop(0, shade(color, 35))
+  headG.addColorStop(1, shade(color, -20))
+  c.fillStyle = headG
+  domePath(c)
+  c.fill()
+
+  if (char === 'kitty') {
+    // pointy ears on the dome
+    c.fillStyle = shade(color, 10)
+    c.beginPath(); c.moveTo(-11, -7); c.lineTo(-7.5, -15.5); c.lineTo(-2.5, -10.5); c.closePath(); c.fill()
+    c.beginPath(); c.moveTo(11, -7); c.lineTo(7.5, -15.5); c.lineTo(2.5, -10.5); c.closePath(); c.fill()
+    // inner ears darker
+    c.fillStyle = shade(color, -45)
+    c.beginPath(); c.moveTo(-9.3, -8.5); c.lineTo(-7.6, -13.3); c.lineTo(-4.6, -10.6); c.closePath(); c.fill()
+    c.beginPath(); c.moveTo(9.3, -8.5); c.lineTo(7.6, -13.3); c.lineTo(4.6, -10.6); c.closePath(); c.fill()
+    // cheek blush
+    c.fillStyle = 'rgba(255,110,150,0.4)'
+    c.beginPath(); c.arc(-8, 2.5, 1.8, 0, Math.PI * 2); c.fill()
+    c.beginPath(); c.arc(8, 2.5, 1.8, 0, Math.PI * 2); c.fill()
+    return
+  }
+
+  // bomber: white cap + brim + badge
+  c.fillStyle = 'rgba(255,255,255,0.95)'
+  capPath(c)
+  c.fill()
+  c.fillStyle = 'rgba(255,255,255,0.9)'
+  roundRect(c, -13, -7.5, 26, 3, 1.5)
+  c.fill()
+  c.fillStyle = color
+  c.beginPath(); c.arc(0, -10.5, 3, 0, Math.PI * 2); c.fill()
+  c.fillStyle = 'rgba(255,255,255,0.35)'
+  c.beginPath(); c.arc(-1, -11.5, 1.2, 0, Math.PI * 2); c.fill()
+}
+
 export class Renderer {
   ctx!: CanvasRenderingContext2D
   canvas: HTMLCanvasElement
@@ -518,9 +639,10 @@ export class Renderer {
     }
   }
 
-  /** pre-rendered player body per color (chibi: dome head + white cap + torso), 2× res */
-  private getPlayerBody(color: string): HTMLCanvasElement {
-    let cv = this.playerBodyCache.get(color)
+  /** pre-rendered player body per (character, color), 2× res */
+  private getCharBody(char: string, color: string): HTMLCanvasElement {
+    const key = char + ':' + color
+    let cv = this.playerBodyCache.get(key)
     if (cv) return cv
     const S = Renderer.SS
     cv = document.createElement('canvas')
@@ -528,52 +650,8 @@ export class Renderer {
     const c = cv.getContext('2d')!
     c.scale(S, S)
     c.translate(16, 16)
-    // torso (gradient, rounded chibi body)
-    const bodyG = c.createLinearGradient(0, 3, 0, 14)
-    bodyG.addColorStop(0, shade(color, 25))
-    bodyG.addColorStop(1, shade(color, -45))
-    c.fillStyle = bodyG
-    roundRect(c, -10, 3, 20, 11, 5)
-    c.fill()
-    // belly plate
-    c.fillStyle = 'rgba(255,255,255,0.18)'
-    roundRect(c, -5.5, 6, 11, 6.5, 3)
-    c.fill()
-    // head dome (player color, flat-bottomed so the face area stays wide)
-    const headG = c.createLinearGradient(0, -15, 0, 4)
-    headG.addColorStop(0, shade(color, 35))
-    headG.addColorStop(1, shade(color, -20))
-    c.fillStyle = headG
-    c.beginPath()
-    c.moveTo(-12, 4)
-    c.lineTo(-12, -5)
-    c.arcTo(-12, -15, -2, -15, 10)
-    c.lineTo(2, -15)
-    c.arcTo(12, -15, 12, -5, 10)
-    c.lineTo(12, 4)
-    c.closePath()
-    c.fill()
-    // white helmet cap
-    c.fillStyle = 'rgba(255,255,255,0.95)'
-    c.beginPath()
-    c.moveTo(-12, -6)
-    c.lineTo(-12, -5)
-    c.arcTo(-12, -15, -2, -15, 10)
-    c.lineTo(2, -15)
-    c.arcTo(12, -15, 12, -5, 10)
-    c.lineTo(12, -6)
-    c.closePath()
-    c.fill()
-    // brim (visor rim)
-    c.fillStyle = 'rgba(255,255,255,0.9)'
-    roundRect(c, -13, -7.5, 26, 3, 1.5)
-    c.fill()
-    // color badge on the cap
-    c.fillStyle = color
-    c.beginPath(); c.arc(0, -10.5, 3, 0, Math.PI * 2); c.fill()
-    c.fillStyle = 'rgba(255,255,255,0.35)'
-    c.beginPath(); c.arc(-1, -11.5, 1.2, 0, Math.PI * 2); c.fill()
-    this.playerBodyCache.set(color, cv)
+    drawCharBody(c, char, color)
+    this.playerBodyCache.set(key, cv)
     return cv
   }
 
@@ -585,7 +663,8 @@ export class Renderer {
     if (p.invincibleUntil > game.time && Math.sin(t * 20) > 0) return
     ctx.save()
     ctx.translate(x, y)
-    const bob = p.moving ? Math.sin(t * 14) * 2 : Math.sin(t * 3) * 1
+    // ghost floats deeper; others bob (step cycle when moving)
+    const bob = p.char === 'ghost' ? Math.sin(t * 3) * 3 : (p.moving ? Math.sin(t * 14) * 2 : Math.sin(t * 3) * 1)
     ctx.translate(0, bob)
 
     // shadow
@@ -610,38 +689,49 @@ export class Renderer {
     // wallpass ghost
     if (p.wallpassUntil > game.time) ctx.globalAlpha = 0.65
 
-    // squash & stretch synced to the step cycle (stretch at the hop's peak)
-    if (p.moving) {
+    // squash & stretch synced to the step cycle (stretch at the hop's peak; ghost floats)
+    if (p.moving && p.char !== 'ghost') {
       const s = Math.sin(t * 14)
       ctx.scale(1 - s * 0.035, 1 + s * 0.035)
     }
 
-    // body (pre-rendered 2× sprite: dome head + cap + torso)
-    ctx.drawImage(this.getPlayerBody(p.color), -16, -16, 32, 32)
-    // eyes (directional, with a periodic blink)
+    // body (pre-rendered 2× sprite per character + color)
+    ctx.drawImage(this.getCharBody(p.char, p.color), -16, -16, 32, 32)
+    // face: glowing visor slits (knight) or dark eyes (others), directional + blink
     const [dc, dr] = [[1, 0], [-1, 0], [0, 1], [0, -1]][p.dir]
     const ex = dc * 3.5, ey = dr * 2.5
     const blink = (t + p.id * 1.7) % 3.4 < 0.12
-    ctx.fillStyle = '#0d1322'
-    if (blink) {
-      roundRect(ctx, -8.2 + ex, 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
-      roundRect(ctx, 2.7 + ex, 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
+    if (p.char === 'knight') {
+      const h = blink ? 1 : 2
+      ctx.fillStyle = p.color
+      roundRect(ctx, -8.5 + ex, 0.5 + ey - h / 2, 5, h, h / 2); ctx.fill()
+      roundRect(ctx, 3.5 + ex, 0.5 + ey - h / 2, 5, h, h / 2); ctx.fill()
     } else {
-      ctx.beginPath(); ctx.arc(-5.5 + ex, 0.5 + ey, 2.8, 0, Math.PI * 2); ctx.fill()
-      ctx.beginPath(); ctx.arc(5.5 + ex, 0.5 + ey, 2.8, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#fff'
-      ctx.beginPath(); ctx.arc(-4.6 + ex, -0.3 + ey, 1, 0, Math.PI * 2); ctx.fill()
-      ctx.beginPath(); ctx.arc(6.4 + ex, -0.3 + ey, 1, 0, Math.PI * 2); ctx.fill()
+      const er = p.char === 'ghost' ? 5 : 5.5
+      const eY = p.char === 'ghost' ? 0 : 0.5
+      ctx.fillStyle = '#0d1322'
+      if (blink) {
+        roundRect(ctx, -er - 2.7 + ex, eY + 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
+        roundRect(ctx, er - 2.7 + ex, eY + 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
+      } else {
+        ctx.beginPath(); ctx.arc(-er + ex, eY + ey, 2.8, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(er + ex, eY + ey, 2.8, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = '#fff'
+        ctx.beginPath(); ctx.arc(-er + 0.9 + ex, eY - 0.8 + ey, 1, 0, Math.PI * 2); ctx.fill()
+        ctx.beginPath(); ctx.arc(er + 0.9 + ex, eY - 0.8 + ey, 1, 0, Math.PI * 2); ctx.fill()
+      }
     }
-    // gloves (sway alternately with the step)
-    const step = p.moving ? Math.sin(t * 14) : 0
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.beginPath(); ctx.arc(-11 + dc, 8 - Math.max(0, step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
-    ctx.beginPath(); ctx.arc(11 + dc, 8 - Math.max(0, -step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
-    // feet (alternating lift)
-    ctx.fillStyle = 'rgba(13,19,34,0.85)'
-    roundRect(ctx, -8.5, 13.5 - Math.max(0, step) * 2.2, 6, 4.5, 2); ctx.fill()
-    roundRect(ctx, 2.5, 13.5 - Math.max(0, -step) * 2.2, 6, 4.5, 2); ctx.fill()
+    // gloves + feet (ghost floats — neither)
+    if (p.char !== 'ghost') {
+      const step = p.moving ? Math.sin(t * 14) : 0
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      ctx.beginPath(); ctx.arc(-11 + dc, 8 - Math.max(0, step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(11 + dc, 8 - Math.max(0, -step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
+      // feet (alternating lift, white so they read on the dark floor)
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      roundRect(ctx, -8.5, 13.5 - Math.max(0, step) * 2.2, 6, 4.5, 2); ctx.fill()
+      roundRect(ctx, 2.5, 13.5 - Math.max(0, -step) * 2.2, 6, 4.5, 2); ctx.fill()
+    }
 
     ctx.restore()
   }
