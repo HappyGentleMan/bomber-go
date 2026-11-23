@@ -40,6 +40,7 @@ let lastInputN = 0
 Object.defineProperty(window, '__game', { get: () => game, configurable: true })
 Object.defineProperty(window, '__input', { get: () => input, configurable: true })
 Object.defineProperty(window, '__net', { get: () => net, configurable: true })
+Object.defineProperty(window, '__renderer', { get: () => renderer, configurable: true })
 
 // ---------- powerup legend (settings screen) ----------
 {

@@ -518,7 +518,7 @@ export class Renderer {
     }
   }
 
-  /** pre-rendered player body per color (gradient body + helmet), 2× res */
+  /** pre-rendered player body per color (chibi: dome head + white cap + torso), 2× res */
   private getPlayerBody(color: string): HTMLCanvasElement {
     let cv = this.playerBodyCache.get(color)
     if (cv) return cv
@@ -528,20 +528,51 @@ export class Renderer {
     const c = cv.getContext('2d')!
     c.scale(S, S)
     c.translate(16, 16)
-    // body (vertical gradient for a rounded, lit look)
-    const bodyG = c.createLinearGradient(0, -12, 0, 14)
-    bodyG.addColorStop(0, '#ffffff')
-    bodyG.addColorStop(0.25, color)
-    bodyG.addColorStop(1, shade(color, -40))
+    // torso (gradient, rounded chibi body)
+    const bodyG = c.createLinearGradient(0, 3, 0, 14)
+    bodyG.addColorStop(0, shade(color, 25))
+    bodyG.addColorStop(1, shade(color, -45))
     c.fillStyle = bodyG
-    roundRect(c, -13, -12, 26, 26, 9)
+    roundRect(c, -10, 3, 20, 11, 5)
     c.fill()
-    // helmet top
-    c.fillStyle = 'rgba(255,255,255,0.94)'
-    roundRect(c, -13, -14, 26, 14, 9)
+    // belly plate
+    c.fillStyle = 'rgba(255,255,255,0.18)'
+    roundRect(c, -5.5, 6, 11, 6.5, 3)
     c.fill()
+    // head dome (player color, flat-bottomed so the face area stays wide)
+    const headG = c.createLinearGradient(0, -15, 0, 4)
+    headG.addColorStop(0, shade(color, 35))
+    headG.addColorStop(1, shade(color, -20))
+    c.fillStyle = headG
+    c.beginPath()
+    c.moveTo(-12, 4)
+    c.lineTo(-12, -5)
+    c.arcTo(-12, -15, -2, -15, 10)
+    c.lineTo(2, -15)
+    c.arcTo(12, -15, 12, -5, 10)
+    c.lineTo(12, 4)
+    c.closePath()
+    c.fill()
+    // white helmet cap
+    c.fillStyle = 'rgba(255,255,255,0.95)'
+    c.beginPath()
+    c.moveTo(-12, -6)
+    c.lineTo(-12, -5)
+    c.arcTo(-12, -15, -2, -15, 10)
+    c.lineTo(2, -15)
+    c.arcTo(12, -15, 12, -5, 10)
+    c.lineTo(12, -6)
+    c.closePath()
+    c.fill()
+    // brim (visor rim)
+    c.fillStyle = 'rgba(255,255,255,0.9)'
+    roundRect(c, -13, -7.5, 26, 3, 1.5)
+    c.fill()
+    // color badge on the cap
     c.fillStyle = color
-    c.fillRect(-13, -4, 26, 4)
+    c.beginPath(); c.arc(0, -10.5, 3, 0, Math.PI * 2); c.fill()
+    c.fillStyle = 'rgba(255,255,255,0.35)'
+    c.beginPath(); c.arc(-1, -11.5, 1.2, 0, Math.PI * 2); c.fill()
     this.playerBodyCache.set(color, cv)
     return cv
   }
@@ -579,22 +610,38 @@ export class Renderer {
     // wallpass ghost
     if (p.wallpassUntil > game.time) ctx.globalAlpha = 0.65
 
-    // body (pre-rendered 2× sprite: gradient body + helmet)
+    // squash & stretch synced to the step cycle (stretch at the hop's peak)
+    if (p.moving) {
+      const s = Math.sin(t * 14)
+      ctx.scale(1 - s * 0.035, 1 + s * 0.035)
+    }
+
+    // body (pre-rendered 2× sprite: dome head + cap + torso)
     ctx.drawImage(this.getPlayerBody(p.color), -16, -16, 32, 32)
-    // eyes
+    // eyes (directional, with a periodic blink)
     const [dc, dr] = [[1, 0], [-1, 0], [0, 1], [0, -1]][p.dir]
-    const ex = dc * 3, ey = dr * 2
+    const ex = dc * 3.5, ey = dr * 2.5
+    const blink = (t + p.id * 1.7) % 3.4 < 0.12
     ctx.fillStyle = '#0d1322'
-    ctx.beginPath(); ctx.arc(-5 + ex, 1 + ey, 3, 0, Math.PI * 2); ctx.fill()
-    ctx.beginPath(); ctx.arc(5 + ex, 1 + ey, 3, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#fff'
-    ctx.beginPath(); ctx.arc(-4 + ex, 0 + ey, 1, 0, Math.PI * 2); ctx.fill()
-    ctx.beginPath(); ctx.arc(6 + ex, 0 + ey, 1, 0, Math.PI * 2); ctx.fill()
-    // feet
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'
-    const step = p.moving ? Math.sin(t * 16) * 3 : 0
-    ctx.fillRect(-9, 13 + step * 0.4, 6, 3)
-    ctx.fillRect(3, 13 - step * 0.4, 6, 3)
+    if (blink) {
+      roundRect(ctx, -8.2 + ex, 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
+      roundRect(ctx, 2.7 + ex, 0.2 + ey, 5.5, 1.6, 0.8); ctx.fill()
+    } else {
+      ctx.beginPath(); ctx.arc(-5.5 + ex, 0.5 + ey, 2.8, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(5.5 + ex, 0.5 + ey, 2.8, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.beginPath(); ctx.arc(-4.6 + ex, -0.3 + ey, 1, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(6.4 + ex, -0.3 + ey, 1, 0, Math.PI * 2); ctx.fill()
+    }
+    // gloves (sway alternately with the step)
+    const step = p.moving ? Math.sin(t * 14) : 0
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.beginPath(); ctx.arc(-11 + dc, 8 - Math.max(0, step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(11 + dc, 8 - Math.max(0, -step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
+    // feet (alternating lift)
+    ctx.fillStyle = 'rgba(13,19,34,0.85)'
+    roundRect(ctx, -8.5, 13.5 - Math.max(0, step) * 2.2, 6, 4.5, 2); ctx.fill()
+    roundRect(ctx, 2.5, 13.5 - Math.max(0, -step) * 2.2, 6, 4.5, 2); ctx.fill()
 
     ctx.restore()
   }
