@@ -1,7 +1,9 @@
-import { Peer, type DataConnection } from 'peerjs'
+import { Peer, type DataConnection, type PeerOptions } from 'peerjs'
 
 /**
  * Online battle networking (host-authoritative, PeerJS data channel).
+ * Signaling: self-hosted PeerServer on the game's own origin (see
+ * signalingOpts below + deploy/peer-server.mjs) — not the free cloud.
  *
  * Protocol (JSON messages over an UNORDERED WebRTC data channel):
  *   client -> host: { t:'input', n, dir, bomb, detonate }  (dir on change, bomb/detonate as edges)
@@ -33,6 +35,30 @@ export function genRoomCode(): string {
 }
 
 const PEER_PREFIX = 'bomberggo-'
+
+/**
+ * Signaling server: self-hosted PeerServer on the game's own origin
+ * (deploy/peer-server.mjs, proxied by Caddy at /peerjs).
+ *
+ * Why not the free 0.peerjs.com cloud: corporate networks/VPNs often block
+ * third-party domains, so host/join dies with "server-error" even though the
+ * game page itself loads fine. Same-origin signaling rides the exact
+ * connection the page loaded on — if the game is visible, rooms work.
+ *
+ * The peerjs client dials ws(s)://{host}:{port}/peerjs?key=peerjs&id=…&token=…
+ * — the server (WS route '/peerjs') registers the peer from that URL.
+ * Fallback: no hostname (e.g. file://) → cloud defaults.
+ */
+function signalingOpts(): Partial<PeerOptions> {
+  const opts: Partial<PeerOptions> = { config: ICE_CONFIG }
+  if (location.hostname) {
+    const secure = location.protocol === 'https:'
+    opts.host = location.hostname
+    opts.port = location.port ? Number(location.port) : (secure ? 443 : 80)
+    opts.secure = secure
+  }
+  return opts
+}
 
 /**
  * ICE servers for the WebRTC data channel.
@@ -72,7 +98,7 @@ export class Net {
     this.isHost = true
     this.roomCode = genRoomCode()
     const code = this.roomCode
-    this.peer = new Peer(PEER_PREFIX + code, { config: ICE_CONFIG })
+    this.peer = new Peer(PEER_PREFIX + code, signalingOpts())
     this.peer.on('connection', (conn) => {
       // accept the first opponent only
       if (this.conn) { try { conn.close() } catch {} return }
@@ -90,10 +116,10 @@ export class Net {
     this.destroy()
     this.isHost = false
     this.roomCode = code.toUpperCase()
-    this.peer = new Peer({ config: ICE_CONFIG })
+    this.peer = new Peer(signalingOpts())
     // if the room isn't reachable in 20s, say so — an endless "Joining…" is worse
     this.joinTimer = window.setTimeout(() => {
-      if (!this.connected) this.onError?.('Cannot reach server — check your connection')
+      if (!this.connected) this.onError?.('Cannot reach the game server — check your connection / VPN')
     }, 20000)
     this.peer.on('open', () => {
       // reliable:false → PeerJS sets SCTP ordered:false (unordered delivery).

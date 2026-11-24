@@ -24,18 +24,35 @@ https://bomber.119-247-94-77.sslip.io {
 	header -Strict-Transport-Security
 	header X-Content-Type-Options "nosniff"
 
-	# hashed bundle assets — immutable
-	@hashed path /assets/*
-	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	# PeerJS signaling — self-hosted (deploy/peer-server.mjs on 127.0.0.1:9100).
+	# Same origin as the game, so networks that can load the page (corporate
+	# VPNs included) can also host/join rooms; the free 0.peerjs.com cloud is
+	# often blocked there. Caddy upgrades WebSockets automatically.
+	# NB: the peerjs client dials the path /peerjs itself (id in the query
+	# string), so match /peerjs and /peerjs/* — "/peerjs/*" alone misses it.
+	# handle blocks run in written order, so this runs BEFORE the SPA
+	# try_files below (a top-level reverse_proxy would be sorted after it).
+	@peerjs {
+		path /peerjs /peerjs/*
+	}
+	handle @peerjs {
+		reverse_proxy 127.0.0.1:9100
+	}
 
-	# entry document + service worker + build stamp — always revalidate
-	@html path / /index.html
-	header @html Cache-Control "no-cache"
-	@sw path /sw.js
-	header @sw Cache-Control "no-cache"
-	@ver path /version.json
-	header @ver Cache-Control "no-cache"
+	handle {
+		# hashed bundle assets — immutable
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
 
-	try_files {path} {path}/ /index.html
-	file_server
+		# entry document + service worker + build stamp — always revalidate
+		@html path / /index.html
+		header @html Cache-Control "no-cache"
+		@sw path /sw.js
+		header @sw Cache-Control "no-cache"
+		@ver path /version.json
+		header @ver Cache-Control "no-cache"
+
+		try_files {path} {path}/ /index.html
+		file_server
+	}
 }

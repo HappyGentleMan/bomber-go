@@ -49,14 +49,31 @@ http://:8414 {
 	@noslash path /bomber
 	redir @noslash /bomber/ 308
 
-	# Funnel forwards the /bomber prefix as-is; strip it before serving files.
-	handle_path /bomber* {
-		try_files {path} {path}/ /index.html
-		file_server
+	# PeerJS signaling — self-hosted (deploy/peer-server.mjs on 127.0.0.1:9100),
+	# same origin as the game (see deploy/public.caddy for the why).
+	# NB: the peerjs client dials the path /peerjs itself (id in the query
+	# string); Funnel URLs keep the /bomber prefix, so match both. Caddy sorts
+	# rewrite BEFORE reverse_proxy even inside handle blocks, so the SPA
+	# fallbacks below must EXCLUDE these paths (order can't be relied on).
+	@peerjs {
+		path /peerjs /peerjs/* /bomber/peerjs /bomber/peerjs/*
+	}
+	handle @peerjs {
+		reverse_proxy 127.0.0.1:9100
 	}
 
-	# Fallback: if the prefix was already stripped upstream, serve at the root.
-	handle {
+	@spa {
+		not path /peerjs /peerjs/* /bomber/peerjs /bomber/peerjs/*
+	}
+
+	# Fallback: serve at the root; if the Funnel /bomber prefix is present,
+	# strip it before serving files (handle_path needs the path as its first
+	# token, so the @spa matcher goes on the outer handle instead).
+	handle @spa {
+		handle_path /bomber* {
+			try_files {path} {path}/ /index.html
+			file_server
+		}
 		try_files {path} {path}/ /index.html
 		file_server
 	}

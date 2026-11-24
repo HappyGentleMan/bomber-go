@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.anson.bomber-go-peer</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/anson/.local/bin/node</string>
+    <string>/Users/anson/Documents/Bomber Go/deploy/peer-server.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/anson/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>WorkingDirectory</key><string>/Users/anson/Documents/Bomber Go</string>
+  <key>StandardOutPath</key><string>/Users/anson/Documents/Bomber Go/deploy/logs/peer.log</string>
+  <key>StandardErrorPath</key><string>/Users/anson/Documents/Bomber Go/deploy/logs/peer.log</string>
+</dict>
+</plist>
