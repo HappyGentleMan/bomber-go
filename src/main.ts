@@ -386,8 +386,12 @@ function wireGame() {
       case 'levelclear':
         ui.showLevelClear(data.level, data.bonus, data.score, data.lives)
         ui.show('clear')
-        renderer.prewarmLevel(data.level + 1) // build the NEXT level's floor during the
-        // 2.2s clear pause so the transition frame is cache-warm (no hitch)
+        // build the NEXT level's floor OFF this frame: this handler fires
+        // from inside the rAF update loop, and the floor build is 20–80 ms —
+        // even on the panel's pop-in frame that stutters the entrance
+        // animation on low-end phones. Double-rAF lands it a couple of
+        // frames later; the 2.2 s clear pause makes that trivially safe.
+        requestAnimationFrame(() => requestAnimationFrame(() => renderer.prewarmLevel(data.level + 1)))
         break
       case 'nextlevel':
         ui.show(null)
@@ -840,6 +844,7 @@ if (dbg) {
   const lvl = parseInt(params.get('level') ?? '0')
   if (lvl > 1 && dbg.mode !== 'battle') {
     for (let i = dbg.level; i < lvl; i++) dbg.nextLevel()
+    renderer.prewarmLevel(lvl) // screenshot tooling: warm the floor before first draw
   }
   const steps = parseInt(params.get('steps') ?? '0')
   const idle = { dir: null as Dir | null, bomb: false, detonate: false }

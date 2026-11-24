@@ -36,8 +36,28 @@ const log = (...a) => console.log('[turn-cert]', ...a)
 // ---------- skip if the current cert is still good ----------
 
 if (fs.existsSync(CERT_FILE)) {
-  const m = fs.readFileSync(CERT_FILE, 'utf8').match(/notAfter\s*=\s*([A-Za-z0-9\s:]+?)(?:\s*\n|$)/m)
-  const days = m ? (new Date(m[1].trim()).getTime() - Date.now()) / 86_400_000 : -1
+  let days = -1
+  const pem = fs.readFileSync(CERT_FILE, 'utf8')
+  // The file is a PEM (possibly the full LE chain — several CERTIFICATE
+  // blocks). A previous version regex-matched `notAfter =` TEXT output and
+  // silently never skipped, burning LE quota on every re-run. Parse it:
+  try {
+    const x = new crypto.X509Certificate(pem)
+    days = (x.validTo.getTime() - Date.now()) / 86_400_000
+  } catch {
+    // fall back to the first block, then to openssl
+    try {
+      const first = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0]
+      if (first) days = (new crypto.X509Certificate(first).validTo.getTime() - Date.now()) / 86_400_000
+    } catch {
+      try {
+        const out = execFileSync('openssl', ['x509', '-noout', '-enddate', '-in', CERT_FILE], { encoding: 'utf8' })
+        const end = out.match(/notAfter=(.+)/)?.[1]
+        if (end) days = (new Date(end.trim()).getTime() - Date.now()) / 86_400_000
+      } catch { /* unparseable → re-issue */ }
+    }
+  }
+  log(`current cert: ${days > 0 ? days.toFixed(0) + ' days left' : 'unparseable/missing'}`)
   if (days > 30) { log(`cert valid for ${days.toFixed(0)} more days — nothing to do`); process.exit(0) }
 }
 
@@ -195,18 +215,20 @@ try {
     }
     if (o.status !== 'valid') throw new Error('order not valid after finalize: ' + JSON.stringify(o).slice(0, 300))
 
-    // ---------- 7. download cert + save the MATCHING key ----------
+    // ---------- 7. download cert, verify key match, THEN save ----------
     const certRes = await fetch(o.certificate)
     const pem = await certRes.text()
     if (!certRes.ok) throw new Error(`cert download failed: ${certRes.status}`)
-    fs.writeFileSync(CERT_FILE, pem, { mode: 0o644 })
-    fs.writeFileSync(PRIV_FILE, certKey.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 })
 
-    // cert ↔ key match (the #1 silent failure mode of this flow)
+    // cert ↔ key match BEFORE writing anything (the #1 silent failure mode
+    // of this flow — a mismatched pair on disk breaks both services)
     const x509 = new crypto.X509Certificate(pem)
     const match = JSON.stringify(x509.publicKey.export({ format: 'jwk' })) ===
       JSON.stringify(certPub.export({ format: 'jwk' }))
     if (!match) throw new Error('CERT/KEY MISMATCH — refusing to save')
+
+    fs.writeFileSync(CERT_FILE, pem, { mode: 0o644 })
+    fs.writeFileSync(PRIV_FILE, certKey.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 })
     log(`cert issued for ${HOST} → ${CERT_FILE} (valid to ${x509.validTo})`)
     log('renewal complete — restart the services to pick up the new key:')
     log('  sudo launchctl kickstart -k system/com.anson.bomber-go-tls-router')

@@ -91,10 +91,18 @@ function json(res, status, obj) {
 function readBody(req) {
   return new Promise((resolve) => {
     let s = ''
-    req.on('data', (d) => { s += d; if (s.length > 65_536) req.destroy() })
-    req.on('end', () => {
-      try { resolve(JSON.parse(s || '{}')) } catch { resolve({}) }
+    let settled = false
+    const finish = (obj) => { if (!settled) { settled = true; resolve(obj) } }
+    req.on('data', (d) => {
+      s += d
+      // oversized: abort AND resolve — destroying req alone would leave the
+      // promise pending forever (no 'end'), pinning this handler frame + s
+      if (s.length > 65_536) { req.destroy(); finish({}) }
     })
+    req.on('end', () => {
+      try { finish(JSON.parse(s || '{}')) } catch { finish({}) }
+    })
+    req.on('close', () => finish({})) // client abort / destroy → release the frame
   })
 }
 

@@ -47,28 +47,35 @@ const key = fs.readFileSync(KEY_PATH)
  *   [extsLen:2 + exts]; SNI ext type 0x0000: [listLen:2][nameType:1][nameLen:2][name]
  */
 function sniFromHello(buf) {
-  if (buf.length < 44 || buf[0] !== 0x16) return null
-  let off = 5
-  if (buf[off] !== 0x01) return null // 0x01 = ClientHello handshake type (0x16 is the RECORD type at [0])
-  off += 4 + 2 + 32 // handshake hdr + version + random
-  const sidLen = buf[off]; off += 1 + sidLen
-  off += 2 + buf.readUInt16BE(off) // cipher suites
-  off += 1 + buf[off] // compression methods
-  if (off + 2 > buf.length) return null
-  const extsLen = buf.readUInt16BE(off); off += 2
-  const extsEnd = off + extsLen
-  while (off + 4 <= extsEnd && off + 4 <= buf.length) {
-    const type = buf.readUInt16BE(off)
-    const len = buf.readUInt16BE(off + 2)
-    off += 4
-    if (type === 0x0000) {
-      if (off + 5 > buf.length) return null
-      const nameLen = buf.readUInt16BE(off + 3)
-      return buf.toString('latin1', off + 5, off + 5 + nameLen).toLowerCase()
+  // A parse failure must NEVER throw: this process owns ALL of :443 (the
+  // game's HTTPS included), so any malformed ClientHello from a scanner
+  // must be treated as "not TURN" and passed through, not crash the router.
+  try {
+    if (buf.length < 44 || buf[0] !== 0x16) return null
+    let off = 5
+    if (buf[off] !== 0x01) return null // 0x01 = ClientHello handshake type (0x16 is the RECORD type at [0])
+    off += 4 + 2 + 32 // handshake hdr + version + random
+    const sidLen = buf[off]; off += 1 + sidLen
+    off += 2 + buf.readUInt16BE(off) // cipher suites
+    off += 1 + buf[off] // compression methods
+    if (off + 2 > buf.length) return null
+    const extsLen = buf.readUInt16BE(off); off += 2
+    const extsEnd = off + extsLen
+    while (off + 4 <= extsEnd && off + 4 <= buf.length) {
+      const type = buf.readUInt16BE(off)
+      const len = buf.readUInt16BE(off + 2)
+      off += 4
+      if (type === 0x0000) {
+        if (off + 5 > buf.length) return null
+        const nameLen = buf.readUInt16BE(off + 3)
+        return buf.toString('latin1', off + 5, off + 5 + nameLen).toLowerCase()
+      }
+      off += len
     }
-    off += len
+    return null
+  } catch {
+    return null
   }
-  return null
 }
 
 /** bidirectional pipe with cleanup */
@@ -140,3 +147,4 @@ const server = net.createServer((socket) => {
 server.listen(LISTEN.port, LISTEN.host, () => {
   console.log(`[bomberggo-tls-router] 443 SNI router on ${LISTEN.host}:${LISTEN.port} → turn:${TURN_SNI}→coturn, else→caddy:${CADDY.port}`)
 })
+server.on('error', (e) => console.log('[router] server ERR', e.code || e.message))

@@ -245,7 +245,7 @@ export class Game {
       return ENEMY_DEFS[e.type!].wallpass
     }
     // sealed pocket: no AI entry (see sealedPocket / tileSolidFor)
-    if (e.isAI !== undefined && this.sealedPocket(c, r)) return false
+    if (e.isAI === true && this.sealedPocket(c, r)) return false
     if (this.bombAt(c, r)) return false
     if (this.enemyAt(c, r)) return e.isAI === undefined // enemy may enter player tile (kills); player can't enter enemy tile
     if (e.isAI !== undefined && this.mode === 'battle') {
@@ -366,8 +366,9 @@ export class Game {
     // a sealed pocket is solid for AI players even on its walkable centre
     // tile: the only entry is a brick (wallpass), and once the timed
     // wallpass expires the bot can never get out (see sealedPocket). Humans
-    // keep the choice — it is their trap to spring
-    if (e.isAI !== undefined && this.sealedPocket(c, r)) return true
+    // keep the choice — it is their trap to spring (a bomb on the centre
+    // tile breaks all four exits, so a human can always free themselves)
+    if (e.isAI === true && this.sealedPocket(c, r)) return true
     if (this.bombAt(c, r)) return true
     return false
   }
