@@ -90,6 +90,14 @@
     <div class="detail" id="d-turntcp"></div>
   </div>
 
+  <div class="card">
+    <div class="row">
+      <div><div class="label">5 · TURN RELAY (TLS :443)</div><div class="desc">Relay over encrypted port 443 — the corporate-firewall path. If any relay test passes, online play works.</div></div>
+      <div class="chip" id="c-turntls">…</div>
+    </div>
+    <div class="detail" id="d-turntls"></div>
+  </div>
+
   <div id="verdict"></div>
   <button id="again" style="display:none">RUN AGAIN</button>
   <div class="foot">Screenshot this page and send it — it tells us exactly what this network allows.</div>
@@ -156,7 +164,7 @@ async function runAll() {
   v.style.display = 'none'
   v.className = ''
   $('again').style.display = 'none'
-  for (const id of ['signal', 'stun', 'turnudp', 'turntcp']) {
+  for (const id of ['signal', 'stun', 'turnudp', 'turntcp', 'turntls']) {
     chip('c-' + id, 'run', 'TESTING')
     $('d-' + id).textContent = ''
   }
@@ -175,13 +183,14 @@ async function runAll() {
     $('d-signal').textContent = 'request failed: ' + e.message
   }
 
-  // 2–4 — WebRTC paths (parallel; separate connections)
-  const [stun, turnUdp, turnTcp] = await Promise.all([
+  // 2–5 — WebRTC paths (parallel; separate connections)
+  const [stun, turnUdp, turnTcp, turnTls] = await Promise.all([
     iceTest([{ urls: 'stun:stun.l.google.com:19302' }], 'srflx', 12000),
     iceTest([{ urls: 'turn:119.247.94.77:3478?transport=udp', ...TURN }], 'relay', 12000),
     iceTest([{ urls: 'turn:119.247.94.77:3478?transport=tcp', ...TURN }], 'relay', 12000),
+    iceTest([{ urls: 'turns:turn.bomber.119-247-94-77.sslip.io:443?transport=tcp', ...TURN }], 'relay', 12000),
   ])
-  for (const [id, r] of [['stun', stun], ['turnudp', turnUdp], ['turntcp', turnTcp]]) {
+  for (const [id, r] of [['stun', stun], ['turnudp', turnUdp], ['turntcp', turnTcp], ['turntls', turnTls]]) {
     chip('c-' + id, r.ok ? 'ok' : 'fail', r.ok ? 'OK' : 'FAIL')
     $('d-' + id).textContent = r.detail
   }
@@ -191,7 +200,7 @@ async function runAll() {
   if (!sigOk) {
     cls = 'bad'; head = '✕ CANNOT REACH THE GAME SERVER'
     body = 'This device can\u2019t even talk to the game server over HTTPS. Nothing will work from this network until that connection is fixed (proxy / VPN / firewall).'
-  } else if (stun.ok || (turnUdp.ok && !turnTcp.ok && !stun.ok) || turnUdp.ok) {
+  } else if (stun.ok || turnUdp.ok) {
     head = '✓ THIS NETWORK CAN PLAY'
     body = stun.ok
       ? 'UDP works — direct and relay paths are available. Make sure the game is the NEW version (hard refresh: Ctrl+Shift+R on the PC) and try again. If it still hangs, open the browser console (F12) while joining and send the errors.'
@@ -199,9 +208,12 @@ async function runAll() {
   } else if (turnTcp.ok) {
     head = '✓ UDP BLOCKED — TCP RELAY WORKS'
     body = 'This network blocks UDP, but the TCP relay path is open. The new game version can connect through it — hard refresh (Ctrl+Shift+R) and try again.'
+  } else if (turnTls.ok) {
+    head = '✓ UDP + TCP BLOCKED — 443 TLS RELAY WORKS'
+    body = 'This network blocks plain UDP and TCP, but the encrypted port-443 relay is open — that is exactly the corporate path. The new game version connects through it — hard refresh (Ctrl+Shift+R) and try again.'
   } else {
     cls = 'bad'; head = '✕ ALL WEBRTC PATHS BLOCKED'
-    body = 'This network blocks UDP and the TURN relay over TCP — there is NO way for a WebRTC call to get through from here. Send me this screenshot and I\u2019ll set up a relay on port 443 (the one port corporate firewalls always allow).'
+    body = 'This network blocks UDP and every TURN relay path — even the port-443 TLS relay. If the game page itself loads in your browser, something here is rewriting HTTPS (a MITM proxy). Send me this screenshot and the browser console (F12) errors.'
   }
   v.innerHTML = '<div class="big">' + head + '</div><div style="margin-top:10px;font-weight:400">' + body + '</div>'
   v.className = cls

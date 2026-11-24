@@ -2,14 +2,18 @@
 #
 # Public URL: https://bomber.119-247-94-77.sslip.io
 #   sslip.io resolves *.119-247-94-77.sslip.io → 119.247.94.77 (Anson's public IP),
-#   and the router forwards 80/443 → 192.168.0.241, where the public Caddy runs.
-#   Caddy issues the Let's Encrypt cert on first request (HTTP-01).
+#   and the router forwards 80/443 → 192.168.0.241.
+#   24-11-2026: Caddy now listens on :8443 (not :443). The 443 port is owned by
+#   deploy/tls-router.mjs, an SNI router that forwards everything to this site
+#   EXCEPT SNI turn.bomber… (that goes to coturn — the 443 TURN relay for
+#   corporate networks that block UDP + 3478).
+#   Caddy issues the Let's Encrypt cert on first request (HTTP-01 on :80).
 #
 # Serves the same deploy/current symlink as the loopback site, so the auto-deploy
 # watcher updates this URL too — no reload needed after a build.
 
-https://bomber.119-247-94-77.sslip.io {
-	bind 192.168.0.241
+https://bomber.119-247-94-77.sslip.io:8443 {
+	bind 192.168.0.241:8443
 
 	root * "/Users/anson/srv/bomber-go/current"
 

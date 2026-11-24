@@ -53,6 +53,10 @@ export function genRoomCode(): string {
  *    direct/srflx path can't be established.
  *  - TURN TCP: for networks that block outbound UDP (many corporate setups) —
  *    the relay path then rides a plain TCP connection to coturn.
+ *  - TURN over TLS on 443 (24-11-2026): the last resort for corporate
+ *    networks that allow ONLY outbound 443/TCP. The SNI router
+ *    (deploy/tls-router.mjs) terminates TLS on turn.bomber…:443 and pipes
+ *    the plaintext TURN protocol to coturn — indistinguishable from HTTPS.
  */
 const TURN_CRED = { username: 'bomberggo', credential: '50b42fd03733a21c51c8de0af13e206f' }
 const ICE_CONFIG: RTCConfiguration = {
@@ -60,6 +64,7 @@ const ICE_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'turn:119.247.94.77:3478?transport=udp', ...TURN_CRED },
     { urls: 'turn:119.247.94.77:3478?transport=tcp', ...TURN_CRED },
+    { urls: 'turns:turn.bomber.119-247-94-77.sslip.io:443?transport=tcp', ...TURN_CRED },
   ],
 }
 

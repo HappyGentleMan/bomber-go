@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BOMBER GO — 443 SNI router (deploy/tls-router.mjs) as a SYSTEM daemon.
+
+  Why root (LaunchDaemon, not LaunchAgent):
+    - root launchd can bind 192.168.0.241:443 reliably across reboots
+    - TCC blocks root launchd from ~/Documents (EPERM), so the script lives
+      in /Users/anson/.local/etc/bomber-go/ (copy of deploy/tls-router.mjs)
+    - logs go to /Users/anson/.hermes/logs/tls-router.log
+
+  Install:
+    sudo cp deploy/launchd-tls-router.plist /Library/LaunchDaemons/
+    sudo cp deploy/tls-router.mjs /Users/anson/.local/etc/bomber-go/tls-router.mjs
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.anson.bomber-go-tls-router.plist
+  Update:
+    sudo cp deploy/tls-router.mjs /Users/anson/.local/etc/bomber-go/tls-router.mjs
+    sudo launchctl kickstart -k system/com.anson.bomber-go-tls-router
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.anson.bomber-go-tls-router</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/anson/.local/bin/node</string>
+    <string>/Users/anson/.local/etc/bomber-go/tls-router.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/anson/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>WorkingDirectory</key><string>/</string>
+  <key>StandardOutPath</key><string>/Users/anson/.hermes/logs/tls-router.log</string>
+  <key>StandardErrorPath</key><string>/Users/anson/.hermes/logs/tls-router.log</string>
+</dict>
+</plist>

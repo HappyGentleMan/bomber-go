@@ -187,6 +187,7 @@ function resetMatchState() {
 
 function startCampaign(): Game {
   game = new Game('campaign', { p1Color: settings.color, p1Char: settings.character })
+  renderer.prewarmLevel(1) // build the level-1 floor off the hot path (no first-frame hitch)
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -200,6 +201,7 @@ function startCampaign(): Game {
 
 function startBattle(aiP2: boolean): Game {
   game = new Game('battle', { aiPlayer2: aiP2, p1Color: settings.color, p1Char: settings.character })
+  renderer.prewarmLevel(1) // battle uses the level-1 theme
   resetMatchState()
   wireGame()
   appState = 'playing'
@@ -214,6 +216,7 @@ function startBattle(aiP2: boolean): Game {
 
 function startAttract() {
   game = new Game('battle', { aiPlayer2: true, attract: true, p1Color: settings.color, p1Char: settings.character })
+  renderer.prewarmLevel(1) // menu background is the battle theme — warm it before first draw
   resetMatchState()
   wireGame()
   appState = 'title'
@@ -264,6 +267,7 @@ function hostOnline() {
     resetMatchState()
     ui.showRoomCode(false)
     game = new Game('battle', { aiPlayer2: false, p1Color: settings.color, p1Char: settings.character })
+    renderer.prewarmLevel(1) // battle theme, before the first in-match frame
     wireGame()
     appState = 'playing'
     lastTickSecond = -1
@@ -294,6 +298,7 @@ function joinOnline() {
     resetMatchState()
     ui.showRoomCode(false)
     remote = new RemoteGame()
+    renderer.prewarmLevel(1) // host's battle state renders with the level-1 theme
     prevSnap = null
     game = null
     appState = 'playing'
@@ -381,6 +386,8 @@ function wireGame() {
       case 'levelclear':
         ui.showLevelClear(data.level, data.bonus, data.score, data.lives)
         ui.show('clear')
+        renderer.prewarmLevel(data.level + 1) // build the NEXT level's floor during the
+        // 2.2s clear pause so the transition frame is cache-warm (no hitch)
         break
       case 'nextlevel':
         ui.show(null)

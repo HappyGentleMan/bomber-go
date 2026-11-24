@@ -358,6 +358,19 @@ export class Renderer {
     ctx.drawImage(this.getFloor(th), 0, 0, CANVAS_W, CANVAS_H)
   }
 
+  /**
+   * Pre-render a level's theme sprites (floor + wall) OFF the hot path.
+   * Themes cycle every level, and the floor is a big offscreen canvas —
+   * building it on the first frame of a new level causes a visible hitch.
+   * Call this during pauses (level-clear panel, menu) so the transition
+   * frame is always cache-warm.
+   */
+  prewarmLevel(level: number) {
+    const th = themeForLevel(level)
+    this.getFloor(th)
+    this.getWallSprites(th)
+  }
+
   /** slow-drifting, twinkling dust motes just above the floor */
   private drawMotes(ctx: CanvasRenderingContext2D, t: number) {
     ctx.save()
