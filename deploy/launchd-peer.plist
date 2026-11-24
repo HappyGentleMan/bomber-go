@@ -6,7 +6,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/Users/anson/.local/bin/node</string>
-    <string>/Users/anson/Documents/Bomber Go/deploy/peer-server.mjs</string>
+    <string>/Users/anson/Documents/Bomber Go/deploy/signal-server.mjs</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

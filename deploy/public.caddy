@@ -24,18 +24,16 @@ https://bomber.119-247-94-77.sslip.io {
 	header -Strict-Transport-Security
 	header X-Content-Type-Options "nosniff"
 
-	# PeerJS signaling — self-hosted (deploy/peer-server.mjs on 127.0.0.1:9100).
-	# Same origin as the game, so networks that can load the page (corporate
-	# VPNs included) can also host/join rooms; the free 0.peerjs.com cloud is
-	# often blocked there. Caddy upgrades WebSockets automatically.
-	# NB: the peerjs client dials the path /peerjs itself (id in the query
-	# string), so match /peerjs and /peerjs/* — "/peerjs/*" alone misses it.
+	# Signaling — self-hosted long-poll server (deploy/signal-server.mjs on
+	# 127.0.0.1:9100), NO WebSockets: corporate proxies routinely block the
+	# WS `Upgrade` handshake while plain HTTPS works. Same origin as the game,
+	# so a network that can load the page can also host/join rooms.
 	# handle blocks run in written order, so this runs BEFORE the SPA
 	# try_files below (a top-level reverse_proxy would be sorted after it).
-	@peerjs {
-		path /peerjs /peerjs/*
+	@signal {
+		path /signal /signal/*
 	}
-	handle @peerjs {
+	handle @signal {
 		reverse_proxy 127.0.0.1:9100
 	}
 

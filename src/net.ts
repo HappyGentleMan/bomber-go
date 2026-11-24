@@ -1,22 +1,25 @@
-import { Peer, type DataConnection, type PeerOptions } from 'peerjs'
-
 /**
- * Online battle networking (host-authoritative, PeerJS data channel).
- * Signaling: self-hosted PeerServer on the game's own origin (see
- * signalingOpts below + deploy/peer-server.mjs) — not the free cloud.
+ * Online battle networking (host-authoritative, raw WebRTC data channel).
  *
- * Protocol (JSON messages over an UNORDERED WebRTC data channel):
+ * Transport: a plain-HTTPS long-poll signaling server on the game's own origin
+ * (deploy/signal-server.mjs, Caddy handle /signal). NO WebSockets — corporate
+ * proxies routinely block the WS `Upgrade` handshake while ordinary HTTPS
+ * works; long-poll rides the same requests the page already uses. Signaling is
+ * one-shot (SDP + ICE), so poll latency is irrelevant; after the handshake the
+ * game runs on a direct WebRTC data channel (or via the TURN relay).
+ *
+ * Protocol (JSON over an UNORDERED, lossy WebRTC data channel):
  *   client -> host: { t:'input', n, dir, bomb, detonate }  (dir on change, bomb/detonate as edges)
  *   host -> client: { t:'state', n, s: Snapshot }          (~30Hz full snapshot)
  *   both:           { t:'bye' }
+ *   client -> host: { t:'hello', c, ch? }                  (identity, after connect)
  *
- * The channel is created with reliable:false (PeerJS → SCTP ordered:false), so
+ * The channel is unordered and lossy (ordered:false, maxRetransmits:0), so
  * messages can arrive out of order: every state/input message carries a
  * sequence number `n` and the receiver drops anything stale. This removes
- * head-of-line blocking — one lost/retransmitted packet no longer stalls all
- * newer snapshots behind it (the classic cause of stutter over cellular).
- * Reliability is kept (SCTP retransmits until delivery), so no message is
- * ever lost; it may just arrive late and be discarded as stale.
+ * head-of-line blocking — one lost packet no longer stalls all newer
+ * snapshots behind it. Reliability comes from the full-state snapshots, not
+ * the transport.
  *
  * The host runs the real Game simulation; the client renders snapshots only.
  */
@@ -27,6 +30,14 @@ export type NetMsg =
   | { t: 'hello'; c: string; ch?: string }
   | { t: 'bye' }
 
+/** signaling messages relayed by /signal (not part of the game protocol) */
+type SignalMsg =
+  | { t: 'offer'; sdp: RTCSessionDescriptionInit }
+  | { t: 'answer'; sdp: RTCSessionDescriptionInit }
+  | { t: 'ice'; cand: RTCIceCandidateInit }
+  | { t: 'hello'; c: string; ch?: string }
+  | { t: 'bye' }
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export function genRoomCode(): string {
   let c = ''
@@ -34,54 +45,48 @@ export function genRoomCode(): string {
   return c
 }
 
-const PEER_PREFIX = 'bomberggo-'
-
 /**
- * Signaling server: self-hosted PeerServer on the game's own origin
- * (deploy/peer-server.mjs, proxied by Caddy at /peerjs).
- *
- * Why not the free 0.peerjs.com cloud: corporate networks/VPNs often block
- * third-party domains, so host/join dies with "server-error" even though the
- * game page itself loads fine. Same-origin signaling rides the exact
- * connection the page loaded on — if the game is visible, rooms work.
- *
- * The peerjs client dials ws(s)://{host}:{port}/peerjs?key=peerjs&id=…&token=…
- * — the server (WS route '/peerjs') registers the peer from that URL.
- * Fallback: no hostname (e.g. file://) → cloud defaults.
+ * ICE servers for the WebRTC data channel, ordered by likelihood:
+ *  - STUN: lets both sides discover their public address (works when at least
+ *    one is not behind a symmetric NAT).
+ *  - TURN UDP: self-hosted relay (coturn on Anson's always-on Mac) when a
+ *    direct/srflx path can't be established.
+ *  - TURN TCP: for networks that block outbound UDP (many corporate setups) —
+ *    the relay path then rides a plain TCP connection to coturn.
  */
-function signalingOpts(): Partial<PeerOptions> {
-  const opts: Partial<PeerOptions> = { config: ICE_CONFIG }
-  if (location.hostname) {
-    const secure = location.protocol === 'https:'
-    opts.host = location.hostname
-    opts.port = location.port ? Number(location.port) : (secure ? 443 : 80)
-    opts.secure = secure
-  }
-  return opts
-}
-
-/**
- * ICE servers for the WebRTC data channel.
- *  - STUN: lets both phones discover their public address (works when at least
- *    one side is not behind a symmetric NAT).
- *  - TURN: self-hosted relay (coturn on Anson's always-on Mac) as the fallback
- *    when the two phones are on different networks and a direct/srflx path
- *    can't be established. UDP only.
- */
+const TURN_CRED = { username: 'bomberggo', credential: '50b42fd03733a21c51c8de0af13e206f' }
 const ICE_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    {
-      urls: 'turn:119.247.94.77:3478?transport=udp',
-      username: 'bomberggo',
-      credential: '50b42fd03733a21c51c8de0af13e206f',
-    },
+    { urls: 'turn:119.247.94.77:3478?transport=udp', ...TURN_CRED },
+    { urls: 'turn:119.247.94.77:3478?transport=tcp', ...TURN_CRED },
   ],
 }
 
+const POLL_MS = 25_000 // client fetch timeout; the server long-polls 20s
+const HEARTBEAT_MS = 5_000 // host room refresh; rooms die 30s after the last beat
+
+async function sig(path: string, body?: any, timeoutMs = 8_000): Promise<any> {
+  const ctl = new AbortController()
+  const to = window.setTimeout(() => ctl.abort(), timeoutMs)
+  try {
+    const r = await fetch('/signal' + path, {
+      method: body ? 'POST' : 'GET',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctl.signal,
+    })
+    return await r.json()
+  } finally {
+    window.clearTimeout(to)
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms))
+
 export class Net {
-  peer: Peer | null = null
-  conn: DataConnection | null = null
+  pc: RTCPeerConnection | null = null
+  dc: RTCDataChannel | null = null
   isHost = false
   roomCode: string | null = null
   connected = false
@@ -90,82 +95,162 @@ export class Net {
   onOpen: (() => void) | null = null
   onClose: (() => void) | null = null
   onError: ((msg: string) => void) | null = null
+  private active = false
   private joinTimer: number | null = null
+  private heartbeat: number | null = null
 
   /** host: create a room with a generated code, wait for one opponent */
-  host() {
+  async host() {
     this.destroy()
     this.isHost = true
     this.roomCode = genRoomCode()
     const code = this.roomCode
-    this.peer = new Peer(PEER_PREFIX + code, signalingOpts())
-    this.peer.on('connection', (conn) => {
-      // accept the first opponent only
-      if (this.conn) { try { conn.close() } catch {} return }
-      this.wire(conn)
-    })
-    this.peer.on('error', (e: any) => {
-      const type = e?.type ?? ''
-      if (type === 'unavailable-id') this.onError?.('Room code collision — try again')
-      else if (type !== 'peer-unavailable') this.onError?.(type || 'network error')
-    })
+    this.active = true
+
+    // the room exists on the server the moment this returns (synchronous),
+    // so the code can be shown immediately — no "is it live?" ambiguity
+    const r = await sig('/host', { code })
+    if (!this.active || !r?.ok) {
+      this.active = false
+      this.onError?.(r?.ok ? 'room gone' : 'Cannot reach the game server — check your connection / VPN')
+      return
+    }
+
+    this.pc = new RTCPeerConnection(ICE_CONFIG)
+    // unordered + no retransmits: stale snapshots are dropped by sequence
+    // number, so head-of-line blocking is impossible
+    this.dc = this.pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 })
+    this.wire(this.dc)
+    this.pc.onicecandidate = (e) => {
+      if (e.candidate) void sig('/send', { code, from: 'host', m: { t: 'ice', cand: e.candidate.toJSON() } })
+    }
+
+    const offer = await this.pc.createOffer()
+    await this.pc.setLocalDescription(offer)
+    await sig('/send', { code, from: 'host', m: { t: 'offer', sdp: this.pc.localDescription!.toJSON() } })
+
+    // keep the room alive while we're waiting for an opponent
+    this.heartbeat = window.setInterval(() => {
+      void sig('/host', { code }, 4_000)
+    }, HEARTBEAT_MS)
+
+    void this.pollLoop(code, 'host')
   }
 
   /** join an existing room by code */
-  join(code: string) {
+  async join(code: string) {
     this.destroy()
     this.isHost = false
     this.roomCode = code.toUpperCase()
-    this.peer = new Peer(signalingOpts())
-    // if the room isn't reachable in 20s, say so — an endless "Joining…" is worse
+    const c = this.roomCode
+    this.active = true
+    // if we can't be in-game within 20s, say so — an endless "Joining…" is worse
     this.joinTimer = window.setTimeout(() => {
       if (!this.connected) this.onError?.('Cannot reach the game server — check your connection / VPN')
-    }, 20000)
-    this.peer.on('open', () => {
-      // reliable:false → PeerJS sets SCTP ordered:false (unordered delivery).
-      // Full-state snapshots make out-of-order harmless (stale ones are
-      // dropped by sequence number); it removes head-of-line blocking on
-      // lossy links. Note: PeerJS does NOT expose maxRetransmits, so SCTP
-      // still retransmits until delivery — nothing is ever lost.
-      const conn = this.peer!.connect(PEER_PREFIX + this.roomCode, { reliable: false })
-      this.wire(conn)
-    })
-    this.peer.on('error', (e: any) => {
-      const type = e?.type ?? ''
-      if (type === 'peer-unavailable') this.onError?.('Room not found — check the code')
-      else this.onError?.(type || 'network error')
-    })
+    }, 20_000)
+
+    const r = await sig('/join', { code: c })
+    if (!this.active) return
+    if (!r?.ok) {
+      this.active = false
+      this.clearJoinTimer()
+      this.onError?.(r?.err === 'no-room' ? 'Room not found — check the code' : 'Cannot reach the game server — check your connection / VPN')
+      return
+    }
+
+    this.pc = new RTCPeerConnection(ICE_CONFIG)
+    this.pc.ondatachannel = (e) => this.wire(e.channel)
+    this.pc.onicecandidate = (e) => {
+      if (e.candidate) void sig('/send', { code: c, from: 'client', m: { t: 'ice', cand: e.candidate.toJSON() } })
+    }
+
+    void this.pollLoop(c, 'client')
   }
 
-  private wire(conn: DataConnection) {
-    conn.on('open', () => {
-      if (this.conn && this.conn !== conn) { try { conn.close() } catch {} return }
-      if (this.joinTimer !== null) { window.clearTimeout(this.joinTimer); this.joinTimer = null }
-      this.conn = conn
+  /** long-poll the signaling server; relayed messages drive the WebRTC handshake */
+  private async pollLoop(code: string, who: 'host' | 'client') {
+    let since = 0
+    while (this.active && this.roomCode === code) {
+      let msgs: { n: number; m: SignalMsg }[] = []
+      try {
+        msgs = (await sig(`/poll?code=${code}&who=${who}&since=${since}`, undefined, POLL_MS))?.msgs ?? []
+      } catch {
+        await sleep(1_000) // network hiccup — retry, don't die
+        continue
+      }
+      for (const { n, m } of msgs) {
+        since = Math.max(since, n)
+        this.handleSignal(m)
+      }
+    }
+  }
+
+  private async handleSignal(m: SignalMsg) {
+    const pc = this.pc
+    if (!pc) return
+    if (m.t === 'bye') {
+      if (this.connected) { this.connected = false; this.onClose?.() }
+      return
+    }
+    if (m.t === 'hello') {
+      this.onMessage?.({ t: 'hello', c: m.c, ch: m.ch })
+      return
+    }
+    try {
+      if (m.t === 'offer') {
+        // client side: receive offer, answer it
+        if (pc.remoteDescription) return
+        await pc.setRemoteDescription(m.sdp)
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        await sig('/send', { code: this.roomCode, from: 'client', m: { t: 'answer', sdp: pc.localDescription!.toJSON() } })
+      } else if (m.t === 'answer') {
+        // host side: receive answer
+        if (pc.remoteDescription) return
+        await pc.setRemoteDescription(m.sdp)
+      } else if (m.t === 'ice') {
+        if (pc.remoteDescription) await pc.addIceCandidate(m.cand)
+      }
+    } catch (e) {
+      console.warn('signal:', e)
+    }
+  }
+
+  private wire(dc: RTCDataChannel) {
+    this.dc = dc
+    dc.onopen = () => {
+      if (!this.active) return
+      this.clearJoinTimer()
       this.connected = true
       this.onOpen?.()
-    })
-    conn.on('data', (d) => {
-      const m = d as NetMsg
-      if (m && m.t === 'bye') {
+    }
+    dc.onmessage = (e) => {
+      let m: NetMsg
+      try { m = JSON.parse(e.data as string) } catch { return }
+      if (!m || typeof m.t !== 'string') return
+      if (m.t === 'bye') {
         this.connected = false
         this.onClose?.()
         return
       }
       this.onMessage?.(m)
-    })
-    conn.on('close', () => {
-      if (this.conn === conn) {
+    }
+    dc.onclose = () => {
+      if (this.dc === dc && this.connected) {
         this.connected = false
         this.onClose?.()
       }
-    })
-    conn.on('error', (e: any) => this.onError?.(String(e?.type ?? 'connection error')))
+    }
+    dc.onerror = () => this.onError?.('connection error')
+  }
+
+  private clearJoinTimer() {
+    if (this.joinTimer !== null) { window.clearTimeout(this.joinTimer); this.joinTimer = null }
   }
 
   send(m: NetMsg) {
-    if (!this.connected || !this.conn) return
-    try { this.conn.send(m) } catch {}
+    if (!this.connected || !this.dc) return
+    try { this.dc.send(JSON.stringify(m)) } catch {}
   }
 
   /** monotonic sequence numbers — the channel is unordered, receivers drop stale msgs */
@@ -184,7 +269,7 @@ export class Net {
   /** which ICE path the data channel is on: 'host' (direct: LAN/tailnet),
    *  'srflx' (via STUN), 'relay' (via TURN) — null until a pair is selected */
   async pathType(): Promise<string | null> {
-    const pc = (this.conn as any)?.peerConnection as RTCPeerConnection | null
+    const pc = this.pc
     if (!pc) return null
     try {
       const stats = await pc.getStats()
@@ -201,12 +286,14 @@ export class Net {
   }
 
   destroy() {
-    if (this.joinTimer !== null) { window.clearTimeout(this.joinTimer); this.joinTimer = null }
-    try { this.send({ t: 'bye' }) } catch {}
-    try { this.conn?.close() } catch {}
-    try { this.peer?.destroy() } catch {}
-    this.conn = null
-    this.peer = null
+    this.active = false
+    this.clearJoinTimer()
+    if (this.heartbeat !== null) { window.clearInterval(this.heartbeat); this.heartbeat = null }
+    try { this.dc?.send(JSON.stringify({ t: 'bye' } satisfies NetMsg)) } catch {}
+    try { this.dc?.close() } catch {}
+    try { this.pc?.close() } catch {}
+    this.dc = null
+    this.pc = null
     this.connected = false
     this.isHost = false
     this.roomCode = null
