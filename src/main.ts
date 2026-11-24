@@ -285,6 +285,9 @@ function joinOnline() {
     ui.onlineStatus(msg, 'err')
     if (!net.connected) leaveNet()
   }
+  net.onProgress = (stage) => {
+    if (stage === 'room-found') ui.onlineStatus(`Room ${code} found — connecting…`)
+  }
   net.onOpen = () => {
     ui.onlineStatus('CONNECTED — FIGHT!', 'ok')
     netRole = 'client'

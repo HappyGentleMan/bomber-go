@@ -43,7 +43,7 @@ https://bomber.119-247-94-77.sslip.io {
 		header @hashed Cache-Control "public, max-age=31536000, immutable"
 
 		# entry document + service worker + build stamp — always revalidate
-		@html path / /index.html
+		@html path / /index.html /net-test.html
 		header @html Cache-Control "no-cache"
 		@sw path /sw.js
 		header @sw Cache-Control "no-cache"

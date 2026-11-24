@@ -95,6 +95,8 @@ export class Net {
   onOpen: (() => void) | null = null
   onClose: (() => void) | null = null
   onError: ((msg: string) => void) | null = null
+  /** coarse progress so the UI can say WHICH step is in flight (room created vs connecting) */
+  onProgress: ((stage: 'room-live' | 'room-found') => void) | null = null
   private active = false
   private joinTimer: number | null = null
   private heartbeat: number | null = null
@@ -115,6 +117,7 @@ export class Net {
       this.onError?.(r?.ok ? 'room gone' : 'Cannot reach the game server — check your connection / VPN')
       return
     }
+    this.onProgress?.('room-live')
 
     this.pc = new RTCPeerConnection(ICE_CONFIG)
     // unordered + no retransmits: stale snapshots are dropped by sequence
@@ -157,6 +160,7 @@ export class Net {
       this.onError?.(r?.err === 'no-room' ? 'Room not found — check the code' : 'Cannot reach the game server — check your connection / VPN')
       return
     }
+    this.onProgress?.('room-found')
 
     this.pc = new RTCPeerConnection(ICE_CONFIG)
     this.pc.ondatachannel = (e) => this.wire(e.channel)
@@ -180,7 +184,9 @@ export class Net {
       }
       for (const { n, m } of msgs) {
         since = Math.max(since, n)
-        this.handleSignal(m)
+        // serialized: an ICE candidate must not race ahead of the offer's
+        // setRemoteDescription (a batch can contain offer + first candidates)
+        await this.handleSignal(m)
       }
     }
   }

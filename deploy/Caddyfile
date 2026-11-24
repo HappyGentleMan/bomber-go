@@ -36,7 +36,7 @@ http://:8414 {
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 
 	# entry document — always revalidate so a new deploy is picked up on reload
-	@html path_regexp ^(/bomber)?/(index\.html)?$
+	@html path_regexp ^(/bomber)?/(index\.html|net-test\.html)?$
 	header @html Cache-Control "no-cache"
 
 	# service worker + build stamp — always revalidate
