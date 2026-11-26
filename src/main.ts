@@ -2,6 +2,7 @@ import { Game, haptic } from './game'
 import { Renderer, type Renderable } from './render'
 import { ui } from './ui'
 import { input } from './input'
+import { FloatingMove } from './touch'
 import { audio } from './audio'
 import { net } from './net'
 import { serializeGame, RemoteGame, diffSnapshots } from './netgame'
@@ -69,12 +70,12 @@ Object.defineProperty(window, '__renderer', { get: () => renderer, configurable:
 
 // ---------- layout ----------
 
-const dpad = document.getElementById('t-dpad')!
 const actions = document.getElementById('t-actions')!
 const pauseWrap = document.getElementById('t-pause-wrap')!
-const joyCluster = document.getElementById('t-joy')!
-const joyBase = document.getElementById('joy-base')!
-const joyKnob = document.getElementById('joy-knob')!
+const moveZone = document.getElementById('move-zone')!
+const floatBase = document.getElementById('float-base')!
+const floatKnob = document.getElementById('float-knob')!
+const floatArrows = [0, 1, 2, 3].map(d => floatBase.querySelector(`.float-arrow[data-dir="${d}"]`) as HTMLElement)
 
 /** place the touch clusters in the black letterbox around the canvas
  *  (side bars in landscape, bottom bar in portrait) so they never cover the game */
@@ -84,22 +85,20 @@ function layoutTouch() {
   // true bottom letterbox: the HUD bar sits ABOVE the stage, so centering in
   // (innerHeight - stageHeight) would overestimate the bar below
   const bottom = window.innerHeight - (sr.top + sr.height)
-  const joy = settings.moveStyle === 'joystick'
-  const moveEl = joy ? joyCluster : dpad
-  const moveW = joy ? 150 : 200
-  const moveH = joy ? 150 : 130
   const actW = 170, actH = 152
   const css = getComputedStyle(document.documentElement)
   const safeB = parseFloat(css.getPropertyValue('--safe-bottom')) || 0
   const safeL = parseFloat(css.getPropertyValue('--safe-left')) || 0
   const safeR = parseFloat(css.getPropertyValue('--safe-right')) || 0
-  const need = Math.max(moveW, 170) + 16 // both clusters must fit the side bar
+  const need = Math.max(132, 170) + 16 // side bar must fit the move base AND actions
   if (side >= need) {
-    // landscape: black bars on the left & right (cluster fits fully)
-    moveEl.style.left = `${Math.max(8 + safeL, side / 2 - moveW / 2)}px`
-    moveEl.style.top = `${Math.max(8, (window.innerHeight - moveH) / 2)}px`
-    moveEl.style.right = 'auto'
-    moveEl.style.bottom = 'auto'
+    // landscape: move zone fills the left black bar; actions in the right bar
+    moveZone.style.left = `${safeL}px`
+    moveZone.style.top = '0px'
+    moveZone.style.width = `${Math.max(0, side - safeL)}px`
+    moveZone.style.height = `${window.innerHeight}px`
+    moveZone.style.right = 'auto'
+    moveZone.style.bottom = 'auto'
     actions.style.right = `${Math.max(8 + safeR, side / 2 - actW / 2)}px`
     actions.style.top = `${Math.max(8, (window.innerHeight - actH) / 2)}px`
     actions.style.left = 'auto'
@@ -110,11 +109,13 @@ function layoutTouch() {
     pauseWrap.style.left = 'auto'
     pauseWrap.style.bottom = 'auto'
   } else {
-    // portrait (or narrow): black bar below the canvas, above the home indicator
-    moveEl.style.left = '14px'
-    moveEl.style.bottom = `${Math.max(8 + safeB, (bottom - safeB) / 2 - moveH / 2)}px`
-    moveEl.style.top = 'auto'
-    moveEl.style.right = 'auto'
+    // portrait: move zone fills the bottom-left black bar (clear of the actions)
+    moveZone.style.left = '0px'
+    moveZone.style.top = `${sr.bottom}px`
+    moveZone.style.width = `${Math.max(132, window.innerWidth - actW - 28)}px`
+    moveZone.style.height = `${Math.max(0, bottom)}px`
+    moveZone.style.right = 'auto'
+    moveZone.style.bottom = 'auto'
     actions.style.right = '14px'
     actions.style.bottom = `${Math.max(8 + safeB, (bottom - safeB) / 2 - actH / 2)}px`
     actions.style.top = 'auto'
@@ -148,8 +149,7 @@ function fit() {
   // height-limited (landscape): guarantee the side letterbox bars fit BOTH
   // clusters (movement AND actions), capping the canvas width when too narrow
   if (heightLimited) {
-    const moveW = settings.moveStyle === 'joystick' ? 150 : 200
-    const need = Math.max(moveW, 170) + 16 + safeL + safeR // 170 = actions cluster width
+    const need = Math.max(132, 170) + 16 + safeL + safeR // 132 = float base, 170 = actions
     if ((availW - w) / 2 < need) {
       w = Math.floor(Math.max(1, availW - 2 * need))
       h = Math.floor(w * CANVAS_H / CANVAS_W)
@@ -158,8 +158,7 @@ function fit() {
   // width-limited (portrait): guarantee the bottom letterbox bar fits the
   // movement cluster, capping the canvas height when the bar would be too short
   if (widthLimited) {
-    const moveH = settings.moveStyle === 'joystick' ? 150 : 130
-    const need = moveH + 16 + safeB
+    const need = 132 + 16 + safeB // float base height + margin
     if ((availH - h) / 2 < need) {
       h = Math.floor(Math.max(1, availH - 2 * need))
       w = Math.floor(h * CANVAS_W / CANVAS_H)
@@ -531,21 +530,18 @@ input.onMenuNav = (d) => {
 
 // ---------- touch ----------
 
-function bindTouch(id: string, dir: Dir | null, bomb = false, det = false) {
+function bindTouch(id: string, bomb = false, det = false) {
   const el = document.getElementById(id)!
   const on = (e: Event) => {
     e.preventDefault()
     audio.ensure()
     if (bomb) input.setTouchBomb()
     else if (det) input.setTouchDetonate()
-    else input.dpadSet(dir!, true)
   }
-  const off = (e: Event) => {
-    e.preventDefault()
-    if (bomb) return
-    if (det) input.setTouchDir(null) // pre-existing: releasing DET also clears movement
-    else input.dpadSet(dir!, false)
-  }
+  // bomb/detonate are edge-triggered — release does nothing. (The old D-pad code
+  // cleared movement on DET release; with floating controls that would steal a
+  // held joystick direction, so release is now a no-op.)
+  const off = (e: Event) => { e.preventDefault() }
   el.addEventListener('touchstart', on, { passive: false })
   el.addEventListener('touchend', off, { passive: false })
   el.addEventListener('touchcancel', off, { passive: false })
@@ -553,61 +549,16 @@ function bindTouch(id: string, dir: Dir | null, bomb = false, det = false) {
   el.addEventListener('mouseup', off)
   el.addEventListener('mouseleave', off)
 }
-bindTouch('t-left', 1)
-bindTouch('t-right', 0)
-bindTouch('t-up', 3)
-bindTouch('t-down', 2)
-bindTouch('t-bomb', null, true)
-bindTouch('t-det', null, false, true)
+bindTouch('t-bomb', true)
+bindTouch('t-det', false, true)
 
-// ---------- virtual joystick (default mobile movement) ----------
-
-const JOY_TRAVEL = 44   // max knob travel from centre (px)
-const JOY_DEAD = 12     // deadzone (px) — below this, no direction
-let joyActive = false
-let joyPointer: number | null = null // which finger owns the joystick — the second finger must not steal it
-
-function joyUpdate(clientX: number, clientY: number) {
-  const r = joyBase.getBoundingClientRect()
-  let dx = clientX - (r.left + r.width / 2)
-  let dy = clientY - (r.top + r.height / 2)
-  const len = Math.hypot(dx, dy)
-  if (len > JOY_TRAVEL) { dx = dx / len * JOY_TRAVEL; dy = dy / len * JOY_TRAVEL }
-  joyKnob.style.transform = `translate(${dx}px, ${dy}px)`
-  const n = Math.hypot(dx, dy)
-  if (n < JOY_DEAD) input.setTouchDir(null)
-  // dominant axis -> one of the 4 game directions
-  else if (Math.abs(dx) >= Math.abs(dy)) input.setTouchDir(dx > 0 ? 0 : 1)
-  else input.setTouchDir(dy > 0 ? 2 : 3)
-}
-function joyEnd() {
-  if (!joyActive) return
-  joyActive = false
-  joyKnob.style.transform = 'translate(0px, 0px)'
-  input.setTouchDir(null)
-}
-joyBase.addEventListener('pointerdown', (e: PointerEvent) => {
-  e.preventDefault()
-  audio.ensure()
-  if (joyActive) return // already tracked — ignore a second finger
-  joyActive = true
-  joyPointer = e.pointerId
-  try { joyBase.setPointerCapture(e.pointerId) } catch { /* synthetic pointers */ }
-  joyUpdate(e.clientX, e.clientY)
-})
-joyBase.addEventListener('pointermove', (e: PointerEvent) => {
-  if (joyActive && e.pointerId === joyPointer) joyUpdate(e.clientX, e.clientY)
-})
-joyBase.addEventListener('pointerup', (e: PointerEvent) => {
-  if (e.pointerId !== joyPointer) return
-  joyPointer = null
-  joyEnd()
-})
-joyBase.addEventListener('pointercancel', (e: PointerEvent) => {
-  if (e.pointerId !== joyPointer) return
-  joyPointer = null
-  joyEnd()
-})
+// ---------- floating movement (joystick default, D-pad option) ----------
+const floatingMove = new FloatingMove(
+  moveZone, floatBase, floatKnob, floatArrows,
+  d => input.setTouchDir(d),
+  settings.moveStyle,
+)
+ui.onMoveStyleChange = (s) => floatingMove.setStyle(s)
 
 document.getElementById('t-pause')!.addEventListener('touchstart', (e) => {
   e.preventDefault()

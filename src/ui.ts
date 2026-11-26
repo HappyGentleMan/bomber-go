@@ -13,6 +13,7 @@ export class UI {
   onAction: ((action: string) => void) | null = null
   onColorChange: ((color: string) => void) | null = null
   onCharChange: ((char: string) => void) | null = null
+  onMoveStyleChange: ((style: 'joystick' | 'dpad') => void) | null = null
   menuIndex = 0
   menuScreen: HTMLElement | null = null
   savedScore = false
@@ -71,6 +72,7 @@ export class UI {
       settings.moveStyle = settings.moveStyle === 'joystick' ? 'dpad' : 'joystick'
       updateSettings({ moveStyle: settings.moveStyle })
       applyMove()
+      this.onMoveStyleChange?.(settings.moveStyle)
       audio.play('menuSelect')
     })
     applyMove()
