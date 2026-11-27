@@ -82,6 +82,8 @@ async function sig(path: string, body?: any, timeoutMs = 8_000): Promise<any> {
       signal: ctl.signal,
     })
     return await r.json()
+  } catch {
+    return null // network error / abort / timeout — callers treat null as failure (no unhandled rejection)
   } finally {
     window.clearTimeout(to)
   }
@@ -103,6 +105,8 @@ export class Net {
   /** coarse progress so the UI can say WHICH step is in flight (room created vs connecting) */
   onProgress: ((stage: 'room-live' | 'room-found') => void) | null = null
   private active = false
+  /** true while a host/join handshake or connection is in flight (re-entry guard) */
+  get busy() { return this.active }
   private joinTimer: number | null = null
   private heartbeat: number | null = null
 

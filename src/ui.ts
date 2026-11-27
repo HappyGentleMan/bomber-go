@@ -168,12 +168,16 @@ export class UI {
         ? `TOP SCORE  ${top.score.toLocaleString()}  ·  ${top.initials}`
         : ''
     }
-    // menu selection state
-    if (screen === 'title' || screen === 'battle' || screen === 'online') {
-      const menu = $(screen === 'title' ? 'menu-main' : screen === 'battle' ? 'menu-battle' : 'menu-online')
-      this.setMenu(menu)
+    // menu selection state (pause/over/battleover are keyboard-navigable too)
+    const menuIds: Partial<Record<Screen, string>> = {
+      title: 'menu-main', battle: 'menu-battle', online: 'menu-online',
+      pause: 'menu-pause', over: 'menu-over', battleover: 'menu-battleover',
+    }
+    const mid = menuIds[screen]
+    if (mid) {
+      this.setMenu($(mid))
     } else {
-      // settings/scores/pause/over/clear/battleover have no menu — drop the stale selection
+      // settings/scores/clear have no menu — drop the stale selection
       this.menuScreen = null
       this.menuIndex = 0
     }
@@ -224,13 +228,13 @@ export class UI {
 
   setMenu(menu: HTMLElement) {
     this.menuScreen = menu
-    const btns = [...menu.querySelectorAll<HTMLButtonElement>('.btn')]
+    const btns = [...menu.querySelectorAll<HTMLButtonElement>('.btn:not(.hidden)')]
     btns.forEach((b, i) => b.classList.toggle('sel', i === this.menuIndex))
   }
 
   menuNav(d: 'up' | 'down' | 'ok' | 'back') {
     if (!this.menuScreen) return
-    const btns = [...this.menuScreen.querySelectorAll<HTMLButtonElement>('.btn')]
+    const btns = [...this.menuScreen.querySelectorAll<HTMLButtonElement>('.btn:not(.hidden)')]
     if (!btns.length) return
     if (d === 'up') {
       this.menuIndex = (this.menuIndex - 1 + btns.length) % btns.length

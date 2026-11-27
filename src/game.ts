@@ -273,7 +273,9 @@ export class Game {
     const active = this.bombs.filter(b => b.owner === p.id).length
     if (active >= p.bombs) return
     if (this.bombAt(p.col, p.row)) return
-    if (this.tile(p.col, p.row) === T_SOFT) return
+    // No T_SOFT rejection: a player can only stand inside a brick once wallpass
+    // expires mid-tile. Allowing the bomb here is their escape (the blast breaks
+    // the brick); rejecting it softlocked them in an enclosed brick forever.
     const fuse = Math.max(BOMB_FUSE_MIN, BOMB_FUSE - (this.level - 1) * 60)
     this.bombs.push({
       id: this.bombId++, owner: p.id,
@@ -299,12 +301,16 @@ export class Game {
       // glide seamlessly into the next tile: a tap stops at the next tile
       // boundary, a hold keeps gliding with no per-tile hitch (choppy feel).
       p.movingDir = inp.dir
-      if (inp.bomb) this.tryPlaceBomb(p)
-      if (inp.detonate) {
+      // a stunned (frozen) player can be hit, not strike — gate bomb/detonate
+      // here too (this is the path update() actually uses; playerInput is only
+      // exercised by the audit). Without this, freeze only stopped movement.
+      const stunned = p.frozenUntil > this.time
+      if (!stunned && inp.bomb) this.tryPlaceBomb(p)
+      if (!stunned && inp.detonate) {
         const oldest = this.bombs.filter(b => b.owner === p.id).sort((a, b) => a.born - b.born)[0]
         if (oldest) this.detonate(oldest)
       }
-      if (p.frozenUntil > this.time) { p.moving = false; p.movingDir = null; this.pickupPowerups(p); continue }
+      if (stunned) { p.moving = false; p.movingDir = null; this.pickupPowerups(p); continue }
       this.moveEntity(p, dt)
       // derive the tile the player occupies (grid logic, pickup, AI, exit)
       p.col = Math.round(p.x); p.row = Math.round(p.y)
@@ -462,7 +468,7 @@ export class Game {
     if (this.state !== 'playing') return
     this.state = 'levelclear'
     this.clearTimer = 2.2
-    const bonus = Math.floor(this.levelTime - this.time) * 10
+    const bonus = Math.max(0, Math.floor(this.levelTime - this.time)) * 10 // late clears must not subtract score
     this.score += bonus
     if (this.level % 4 === 0) this.lives++
     this.flash('120,255,200', 0.35, 0.5)
@@ -952,7 +958,7 @@ export class Game {
         if (free(c, r)) break
       }
     }
-    if (c < 0) return
+    if (c < 0 || !free(c, r)) return // the last failed random try may be a wall/occupied tile
     this.bombs.push({ id: this.bombId++, owner: -1, col: c, row: r, x: c, y: r, sliding: null, fuse: 1500, power: 2, born: this.time })
     audio.play('bomb')
   }
@@ -994,6 +1000,7 @@ export class Game {
     this.powerups = this.def.powerups.map(u => ({ ...u, born: 0, revealed: false }))
     this.enemies = []
     this.time = 0
+    this.lastSuddenDetonation = -Infinity // else round 2+ inherits round 1's window and skips every kill credit
     this.suddenDeath = false
     this.suddenTick = 0
     this.battleNextItem = 12

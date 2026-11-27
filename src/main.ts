@@ -30,6 +30,7 @@ let prevSnap: any = null
 let remoteInput = { dir: null as Dir | null, bomb: false, detonate: false }
 // client: track last sent dir to only send on change
 let lastSentDir: Dir | null = null
+let dirResend = 0 // periodic re-assert of the held dir over the lossy input channel (I9)
 let snapTimer = 0
 // refit the canvas when the HUD bar appears/disappears (it reserves vertical space)
 let lastHudVisible = false
@@ -231,6 +232,7 @@ function leaveNet() {
   remote = null
   prevSnap = null
   lastSentDir = null
+  dirResend = 0
   remoteInput = { dir: null, bomb: false, detonate: false }
   snapTimer = 0
   lastStateN = 0
@@ -251,7 +253,7 @@ function showPathBanner() {
 }
 
 function hostOnline() {
-  if (netRole !== 'none') return
+  if (netRole !== 'none' || net.busy) return // netRole stays 'none' during the handshake — guard re-entry (I7)
   net.onError = (msg) => {
     ui.onlineStatus(msg, 'err')
     if (!net.connected) leaveNet()
@@ -279,7 +281,7 @@ function hostOnline() {
 }
 
 function joinOnline() {
-  if (netRole !== 'none') return
+  if (netRole !== 'none' || net.busy) return
   const code = ui.getOnlineCode()
   if (code.length < 4) { ui.onlineStatus('Enter the 5-letter room code first', 'err'); return }
   ui.onlineStatus(`Joining room ${code}…`)
@@ -440,7 +442,7 @@ function toTitle() {
 
 function pause() {
   if (appState !== 'playing' || !game) return
-  if (netRole === 'client') { ui.banner('CAN’T PAUSE ONLINE', 1.2); return }
+  if (netRole === 'client' || (netRole === 'host' && net.connected)) { ui.banner('CAN’T PAUSE ONLINE', 1.2); return }
   appState = 'paused'
   ui.show('pause')
   audio.setTrack('menu')
@@ -495,17 +497,20 @@ ui.onAction = (action: string) => {
     }
     case 'scores': ui.showScores(); ui.show('scores'); break
     case 'settings': ui.show('settings'); break
-    case 'back':
+    case 'back': {
+      const from = ui.screen
       // leaving the online screen drops any half-open room
-      if (ui.screen === 'online' && !net.connected) leaveNet()
-      ui.show('title'); ui.menuIndex = 0
-      audio.setTrack('menu')
+      if (from === 'online' && !net.connected) leaveNet()
+      // a finished game (over/battleover) needs a fresh attract, not just the overlay
+      if (from === 'over' || from === 'battleover') toTitle()
+      else { ui.show('title'); ui.menuIndex = 0; audio.setTrack('menu') }
       break
+    }
     case 'resume': resume(); break
     case 'to-menu': toTitle(); break
     case 'save-score':
       if (game) ui.saveScore(game.score, game.level, game.mode)
-      ui.show(null)
+      toTitle() // ui.show(null) alone left a dead frozen field with no menu (C1)
       break
     case 'rematch':
       ui.setRematchHidden(false)
@@ -686,6 +691,13 @@ function loop(now: number) {
     if (inputs.p1.dir !== lastSentDir) {
       lastSentDir = inputs.p1.dir
       net.sendInput(inputs.p1.dir, false, false)
+      dirResend = 0
+    } else {
+      // the input channel is lossy by design: a dropped release/change packet
+      // would strand the remote player walking forever. Re-assert the held dir
+      // periodically so any loss self-heals (edges below stay one-shot).
+      dirResend += dt
+      if (dirResend >= 0.15) { dirResend = 0; net.sendInput(lastSentDir, false, false) }
     }
     if (inputs.p1.bomb) net.sendInput(lastSentDir, true, false)
     if (inputs.p1.detonate) net.sendInput(lastSentDir, false, true)

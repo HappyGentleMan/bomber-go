@@ -204,7 +204,9 @@ export function diffSnapshots(prev: any, cur: any): NetEvents {
     // a round just ended with a winner
     ev.roundWin = cur.lastRoundWin
   } else if (cur.state === 'playing' && prev.state === 'playing' && cur.round !== prev.round) {
-    ev.roundWin = -1
+    // a new round started — credit the winner even if the SAME player won again
+    // (lastRoundWin unchanged), otherwise consecutive wins show no banner
+    ev.roundWin = cur.lastRoundWin >= 0 ? cur.lastRoundWin : -1
   }
   return ev
 }

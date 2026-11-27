@@ -29,6 +29,8 @@ class InputManager {
   private touchDetonate = false
   /** d-pad buttons currently held, in press order — the newest finger wins */
   private dpadOrder: Dir[] = []
+  /** previous poll's gamepad bomb/detonate pressed state [g1bomb,g1det,g2bomb,g2det] — edge-detect */
+  private padPrev = [false, false, false, false]
   /** true once a real key / gamepad has been seen — used to hint "P2 needs a keyboard" */
   keyboardSeen = false
   gamepadSeen = false
@@ -53,14 +55,21 @@ class InputManager {
     window.removeEventListener('blur', this.onBlur)
   }
 
-  private onBlur = () => { this.down.clear(); this.touchDir = null; this.dpadOrder = [] }
+  private onBlur = () => {
+    this.down.clear(); this.touchDir = null; this.dpadOrder = []
+    // keyup never arrives on blur — clear held dirs + pending edges too, or the
+    // player walks forever after an alt-tab resume (and online, keeps sending it)
+    this.lastDir1 = null; this.lastDir2 = null
+    this.p1.bomb = false; this.p1.detonate = false; this.p2.bomb = false; this.p2.detonate = false
+  }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (e.repeat) { e.preventDefault(); return }
     this.keyboardSeen = true
     // typing in a text field (room code, high-score name) must not drive the game
     const ae = document.activeElement as HTMLElement | null
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return
+    // repeat check AFTER the field guard so holding a key in a text field still repeats
+    if (e.repeat) { e.preventDefault(); return }
     this.down.add(e.code)
 
     if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -111,8 +120,8 @@ class InputManager {
       const ax = p.axes[0] ?? 0, ay = p.axes[1] ?? 0
       if (Math.abs(ax) > 0.5) return ax > 0 ? 0 : 1
       if (Math.abs(ay) > 0.5) return ay > 0 ? 2 : 3
-      if (p.buttons[14]?.pressed) return 0
-      if (p.buttons[15]?.pressed) return 1
+      if (p.buttons[14]?.pressed) return 1 // W3C standard: 14 = LEFT
+      if (p.buttons[15]?.pressed) return 0 // W3C standard: 15 = RIGHT
       if (p.buttons[13]?.pressed) return 2
       if (p.buttons[12]?.pressed) return 3
       return null
@@ -127,10 +136,11 @@ class InputManager {
     const dir1 = this.lastDir1 ?? pd1 ?? tDir
     const dir2 = this.lastDir2 ?? pd2
 
-    if (g1?.buttons[0]?.pressed) this.p1.bomb = true
-    if (g1?.buttons[2]?.pressed) this.p1.detonate = true
-    if (g2?.buttons[0]?.pressed) this.p2.bomb = true
-    if (g2?.buttons[2]?.pressed) this.p2.detonate = true
+    if (g1?.buttons[0]?.pressed && !this.padPrev[0]) this.p1.bomb = true
+    if (g1?.buttons[2]?.pressed && !this.padPrev[1]) this.p1.detonate = true
+    if (g2?.buttons[0]?.pressed && !this.padPrev[2]) this.p2.bomb = true
+    if (g2?.buttons[2]?.pressed && !this.padPrev[3]) this.p2.detonate = true
+    this.padPrev = [!!g1?.buttons[0]?.pressed, !!g1?.buttons[2]?.pressed, !!g2?.buttons[0]?.pressed, !!g2?.buttons[2]?.pressed]
 
     // Return COPIES of the edge-triggered flags — `this.p1`/`this.p2` are the
     // live state we clear right after. Returning references (the old bug) meant
