@@ -182,7 +182,10 @@ export class UI {
   onlineStatus(msg: string, tone: 'info' | 'ok' | 'err' = 'info') {
     const el = $('online-status')
     if (!el) return
-    el.textContent = msg
+    const icon = tone === 'ok' ? 'i-check' : tone === 'err' ? 'i-alert' : 'i-spinner'
+    const spin = tone === 'info' ? ' class="spin"' : ''
+    el.innerHTML = `<svg${spin}><use href="#${icon}"/></svg><span></span>`
+    el.querySelector('span')!.textContent = msg
     el.style.color = tone === 'ok' ? '#7dffa8' : tone === 'err' ? '#ff8080' : 'var(--neon)'
   }
 
@@ -282,7 +285,7 @@ export class UI {
     const list = getScores()
     const el = $('scores-list')
     if (!list.length) {
-      el.innerHTML = '<div class="hint" style="padding:10px">No scores yet — go blast some bricks!</div>'
+      el.innerHTML = '<div class="scores-empty"><svg><use href="#i-scores"/></svg><span class="hint">No scores yet — go blast some bricks!</span></div>'
       return
     }
     el.innerHTML = list.map((s, i) =>

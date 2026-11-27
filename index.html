@@ -19,6 +19,13 @@
       --pink: #ff2e88;
       --gold: #ffd54a;
       --text: #e8f0ff;
+      /* design tokens — one source of truth for spacing, radius, type, motion */
+      --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+      --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 22px;
+      --fs-sm: 12px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 24px;
+      --dur-fast: .12s; --dur-base: .22s;
+      --ease-out: cubic-bezier(.2, 1, .4, 1);
+      --tap: 44px;
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
       --safe-right: env(safe-area-inset-right, 0px);
@@ -86,10 +93,16 @@
       color: var(--text);
       font: inherit; font-weight: 700; letter-spacing: .12em;
       font-size: clamp(14px, 2.2vw, 18px);
-      padding: 12px 34px; border-radius: 12px; cursor: pointer;
-      min-width: 260px; text-align: center;
-      transition: transform .12s cubic-bezier(.2,1.4,.4,1), box-shadow .15s ease, border-color .15s ease;
+      padding: 12px 34px; border-radius: var(--radius-md); cursor: pointer;
+      min-width: 260px; min-height: var(--tap); text-align: center;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) ease, border-color var(--dur-base) ease;
     }
+    .btn-ico { width: 18px; height: 18px; flex: none; opacity: .9; }
+    .btn:focus-visible, .tbtn:focus-visible, .toggle:focus-visible, .swatch:focus-visible, .charopt:focus-visible {
+      outline: 2px solid var(--gold); outline-offset: 3px;
+    }
+    .btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; filter: saturate(.5); }
     /* light sheen sweep on hover / selected (background-position: no transform, works everywhere) */
     .btn::after {
       content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -275,9 +288,13 @@
       box-shadow: 0 4px 14px rgba(0,0,0,.45);
     }
     .tbtn:active { background: rgba(0,229,255,.25); }
-    #t-bomb  { width: 92px; height: 92px; border-color: rgba(255,213,74,.55); font-size: 13px; letter-spacing: .05em; border-radius: 50%; }
-    #t-det   { width: 64px; height: 64px; border-color: rgba(255,120,60,.55); font-size: 8.5px; letter-spacing: .02em; border-radius: 50%; }
+    .tbtn-ico { width: 26px; height: 26px; }
+    #t-bomb  { width: 92px; height: 92px; border-color: rgba(255,213,74,.55); font-size: 12px; letter-spacing: .05em; border-radius: 50%; flex-direction: column; gap: 3px; }
+    #t-bomb .tbtn-ico { width: 30px; height: 30px; color: var(--gold); }
+    #t-det   { width: 64px; height: 64px; border-color: rgba(255,120,60,.55); font-size: 9px; letter-spacing: .02em; border-radius: 50%; flex-direction: column; gap: 2px; }
+    #t-det .tbtn-ico { width: 22px; height: 22px; color: #ff9840; }
     #t-pause { width: 48px; height: 48px; font-size: 16px; border-radius: 50%; background: rgba(10,16,32,.45); }
+    #t-pause .tbtn-ico { width: 20px; height: 20px; }
     #t-pause-wrap { justify-items: center; }
     /* online room code */
     input.code-input {
@@ -306,14 +323,21 @@
       box-shadow: 0 0 14px rgba(0,229,255,.22), inset 0 0 10px rgba(0,229,255,.08);
       text-shadow: 0 0 8px rgba(0,229,255,.6);
     }
+    /* status + empty states */
+    #online-status { display: inline-flex; align-items: center; gap: 8px; justify-content: center; }
+    #online-status svg { width: 16px; height: 16px; flex: none; }
+    .spin { animation: spin 0.9s linear infinite; transform-origin: center; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .scores-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 10px; opacity: .85; }
+    .scores-empty svg { width: 34px; height: 34px; color: var(--gold); opacity: .7; }
     /* portrait phones: menus use the FULL screen (the canvas is a short
        strip in portrait, so menus must not be trapped in it or they scroll) */
     @media (orientation: portrait) and (max-width: 520px) {
-      .overlay { position: fixed; inset: 0; gap: 12px; padding: 16px; }
+      .overlay { position: fixed; inset: 0; gap: 14px; padding: 16px; justify-content: flex-end; padding-bottom: calc(22px + var(--safe-bottom)); }
       .logo { font-size: clamp(26px, 9vw, 40px); }
       .logo small { margin-top: 4px; letter-spacing: .4em; }
-      .btn { min-width: 220px; padding: 11px 22px; font-size: 15px; }
-      .menu { gap: 9px; }
+      .btn { min-width: min(320px, 86vw); padding: 13px 22px; font-size: 15px; }
+      .menu { gap: 10px; }
       #ui-title #title-ai { display: none; }
       #ui-title > .hint:last-of-type { display: none; }
       .panel { padding: 12px 18px; }
@@ -331,6 +355,26 @@
   </style>
 </head>
 <body>
+  <!-- inline SVG icon sprite (zero external assets); referenced via <use href="#i-..."> -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-career" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4m0 0h11l-2 4 2 4H5"/></symbol>
+      <symbol id="i-battle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></symbol>
+      <symbol id="i-online" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></symbol>
+      <symbol id="i-scores" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8m-4-4v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 5v14M15 5v14"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4l13 8-13 8z"/></symbol>
+      <symbol id="i-bomb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="14" r="6"/><path d="M14.5 9.5L17 7m0 0l1.5-1.5M17 7l1.5 1.5M17 7L15.5 5.5"/></symbol>
+      <symbol id="i-det" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="10" height="10" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></symbol>
+      <symbol id="i-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 019 9"/></symbol>
+    </defs>
+  </svg>
   <div id="app">
     <div id="hud" class="hidden">
       <div class="stat" id="hud-player"></div>
@@ -349,11 +393,12 @@
         <div class="hint" id="title-top" style="letter-spacing:.15em"></div>
         <div class="hint" id="title-ai" style="font-size:10px; opacity:.4; letter-spacing:.2em">AI VS AI IN THE BACKGROUND</div>
         <div class="rotate-hint">⟳ ROTATE FOR A BIGGER GAME</div>
-        <div class="menu" id="menu-main">          <button class="btn primary sel" data-action="campaign">CAREER</button>
-          <button class="btn" data-action="battle">BATTLE</button>
-          <button class="btn" data-action="online">ONLINE</button>
-          <button class="btn" data-action="scores">SCORES</button>
-          <button class="btn" data-action="settings">SETTINGS</button>
+        <div class="menu" id="menu-main">
+          <button class="btn primary sel" data-action="campaign"><svg class="btn-ico"><use href="#i-career"/></svg>CAREER</button>
+          <button class="btn" data-action="battle"><svg class="btn-ico"><use href="#i-battle"/></svg>BATTLE</button>
+          <button class="btn" data-action="online"><svg class="btn-ico"><use href="#i-online"/></svg>ONLINE</button>
+          <button class="btn" data-action="scores"><svg class="btn-ico"><use href="#i-scores"/></svg>SCORES</button>
+          <button class="btn" data-action="settings"><svg class="btn-ico"><use href="#i-settings"/></svg>SETTINGS</button>
         </div>
         <div class="hint">⌨ <span class="kbd">W A S D</span> move · <span class="kbd">SPACE</span> bomb · <span class="kbd">E</span> detonate · <span class="kbd">P</span> pause</div>
       </div>
@@ -364,7 +409,7 @@
         <div class="menu" id="menu-battle">
           <button class="btn primary sel" data-action="battle-1p">1P vs AI</button>
           <button class="btn" data-action="battle-2p">2P LOCAL</button>
-          <button class="btn" data-action="back">BACK</button>
+          <button class="btn" data-action="back"><svg class="btn-ico"><use href="#i-back"/></svg>BACK</button>
         </div>
         <div class="hint">P1 <span class="kbd">WASD</span>+<span class="kbd">SPACE</span> · P2 <span class="kbd">IJKL</span>+<span class="kbd">ENTER</span> · 2P LOCAL needs 2 keyboards / gamepads</div>
       </div>
@@ -384,7 +429,7 @@
         <div class="hint" style="letter-spacing:.25em; margin-top:10px">POWER-UPS</div>
         <div class="panel" id="powerup-legend" style="text-align:left; max-height:38vh; overflow-y:auto; width:100%"></div>
         <div class="menu">
-          <button class="btn" data-action="back">BACK</button>
+          <button class="btn" data-action="back"><svg class="btn-ico"><use href="#i-back"/></svg>BACK</button>
         </div>
       </div>
 
@@ -393,7 +438,7 @@
         <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">HIGH SCORES</div>
         <div class="panel score-table" id="scores-list" style="min-width: 280px"></div>
         <div class="menu">
-          <button class="btn" data-action="back">BACK</button>
+          <button class="btn" data-action="back"><svg class="btn-ico"><use href="#i-back"/></svg>BACK</button>
         </div>
       </div>
 
@@ -401,7 +446,7 @@
       <div id="ui-pause" class="overlay hidden">
         <div class="logo" style="font-size: clamp(24px,4.5vw,40px)">PAUSED</div>
         <div class="menu">
-          <button class="btn primary" data-action="resume">RESUME</button>
+          <button class="btn primary" data-action="resume"><svg class="btn-ico"><use href="#i-play"/></svg>RESUME</button>
           <button class="btn" data-action="to-menu">QUIT TO MENU</button>
         </div>
       </div>
@@ -419,7 +464,7 @@
         </div>
         <div class="menu">
           <button class="btn primary hidden" id="over-save" data-action="save-score">SAVE</button>
-          <button class="btn" data-action="to-menu">MENU</button>
+          <button class="btn" data-action="to-menu"><svg class="btn-ico"><use href="#i-home"/></svg>MENU</button>
         </div>
       </div>
 
@@ -437,8 +482,8 @@
         <div class="logo" id="battle-result" style="font-size: clamp(24px,5vw,44px)">PLAYER 1 WINS</div>
         <div class="hint" id="battle-stats" style="font-size:16px; letter-spacing:.2em; margin:4px 0 10px"></div>
         <div class="menu">
-          <button class="btn primary" data-action="rematch">REMATCH</button>
-          <button class="btn" data-action="to-menu">MENU</button>
+          <button class="btn primary" data-action="rematch"><svg class="btn-ico"><use href="#i-battle"/></svg>REMATCH</button>
+          <button class="btn" data-action="to-menu"><svg class="btn-ico"><use href="#i-home"/></svg>MENU</button>
         </div>
       </div>
 
@@ -448,14 +493,14 @@
         <div class="menu" id="menu-online">
           <button class="btn primary sel" data-action="online-host">CREATE ROOM</button>
           <button class="btn" data-action="online-join">JOIN WITH CODE</button>
-          <button class="btn" data-action="back">BACK</button>
+          <button class="btn" data-action="back"><svg class="btn-ico"><use href="#i-back"/></svg>BACK</button>
         </div>
         <div class="panel">
           <!-- host: the room code is the hero of this screen -->
           <div id="room-code-box" class="hidden">
             <div class="rc-label">SHARE THIS CODE</div>
             <div class="room-tiles" id="room-tiles"></div>
-            <button class="btn primary" id="online-copy" style="min-width:150px" data-action="online-copy">COPY CODE</button>
+            <button class="btn primary" id="online-copy" style="min-width:150px" data-action="online-copy"><svg class="btn-ico"><use href="#i-copy"/></svg>COPY CODE</button>
           </div>
           <!-- join with code -->
           <div class="row" id="join-row">
@@ -480,13 +525,13 @@
       </div>
       <div class="tcluster" id="t-actions">
         <div class="trow">
-          <div class="tbtn" id="t-bomb">BOMB</div>
-          <div class="tbtn" id="t-det">DETONATE</div>
+          <div class="tbtn" id="t-bomb"><svg class="tbtn-ico"><use href="#i-bomb"/></svg><span>BOMB</span></div>
+          <div class="tbtn" id="t-det"><svg class="tbtn-ico"><use href="#i-det"/></svg><span>DET</span></div>
         </div>
       </div>
       <!-- pause lives in the letterbox (outside the canvas) — see layoutTouch() -->
       <div class="tcluster" id="t-pause-wrap">
-        <div class="tbtn" id="t-pause">II</div>
+        <div class="tbtn" id="t-pause"><svg class="tbtn-ico"><use href="#i-pause"/></svg></div>
       </div>
     </div>
   </div>
