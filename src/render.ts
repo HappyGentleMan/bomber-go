@@ -103,6 +103,10 @@ export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: s
     c.fill()
     c.fillStyle = color
     c.fillRect(-13, -4, 26, 4)
+    c.strokeStyle = 'rgba(8,12,24,0.45)'
+    c.lineWidth = 1
+    roundRect(c, -13, -12, 26, 26, 9)
+    c.stroke()
     return
   }
 
@@ -121,6 +125,9 @@ export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: s
     c.quadraticCurveTo(-9, 7, -12, 1)
     c.closePath()
     c.fill()
+    c.strokeStyle = 'rgba(8,12,24,0.4)'
+    c.lineWidth = 1
+    c.stroke()
     c.globalAlpha = 1
     // top highlight
     c.fillStyle = 'rgba(255,255,255,0.25)'
@@ -135,6 +142,10 @@ export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: s
   c.fillStyle = bodyG
   roundRect(c, -10, 3, 20, 11, 5)
   c.fill()
+  c.strokeStyle = 'rgba(8,12,24,0.45)'
+  c.lineWidth = 1
+  roundRect(c, -10, 3, 20, 11, 5)
+  c.stroke()
   // belly plate
   c.fillStyle = 'rgba(255,255,255,0.18)'
   roundRect(c, -5.5, 6, 11, 6.5, 3)
@@ -153,6 +164,10 @@ export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: s
     c.fillStyle = 'rgba(255,255,255,0.95)'
     domePath(c)
     c.fill()
+    c.strokeStyle = 'rgba(8,12,24,0.4)'
+    c.lineWidth = 1
+    domePath(c)
+    c.stroke()
     // dark visor band (slits drawn live)
     c.fillStyle = 'rgba(13,19,34,0.92)'
     roundRect(c, -10, -4, 20, 8, 4)
@@ -167,6 +182,13 @@ export function drawCharBody(c: CanvasRenderingContext2D, char: string, color: s
   c.fillStyle = headG
   domePath(c)
   c.fill()
+  c.strokeStyle = 'rgba(8,12,24,0.45)'
+  c.lineWidth = 1
+  domePath(c)
+  c.stroke()
+  // glossy top highlight (reads on kitty; bomber's cap covers it)
+  c.fillStyle = 'rgba(255,255,255,0.18)'
+  c.beginPath(); c.ellipse(-4, -10, 5, 2.4, -0.35, 0, Math.PI * 2); c.fill()
 
   if (char === 'kitty') {
     // pointy ears on the dome
@@ -719,10 +741,15 @@ export class Renderer {
     // wallpass ghost
     if (p.wallpassUntil > game.time) ctx.globalAlpha = 0.65
 
-    // squash & stretch synced to the step cycle (stretch at the hop's peak; ghost floats)
+    // directional lean into the movement + squash & stretch on the step cycle
+    // (ghost floats upright); idle breathing keeps still characters alive
     if (p.moving && p.char !== 'ghost') {
+      ctx.rotate(p.dir === 0 ? 0.07 : p.dir === 1 ? -0.07 : 0)
       const s = Math.sin(t * 14)
       ctx.scale(1 - s * 0.035, 1 + s * 0.035)
+    } else if (!p.moving && p.char !== 'ghost') {
+      const br = Math.sin(t * 2.2 + p.id * 1.3)
+      ctx.scale(1 - br * 0.012, 1 + br * 0.02)
     }
 
     // body (pre-rendered 2× sprite per character + color)
@@ -751,16 +778,16 @@ export class Renderer {
         ctx.beginPath(); ctx.arc(er + 0.9 + ex, eY - 0.8 + ey, 1, 0, Math.PI * 2); ctx.fill()
       }
     }
-    // gloves + feet (ghost floats — neither)
+    // gloves + feet (ghost floats — neither); arms swing opposite the legs
     if (p.char !== 'ghost') {
       const step = p.moving ? Math.sin(t * 14) : 0
       ctx.fillStyle = 'rgba(255,255,255,0.85)'
-      ctx.beginPath(); ctx.arc(-11 + dc, 8 - Math.max(0, step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
-      ctx.beginPath(); ctx.arc(11 + dc, 8 - Math.max(0, -step) * 1.5, 2.5, 0, Math.PI * 2); ctx.fill()
-      // feet (alternating lift, white so they read on the dark floor)
+      ctx.beginPath(); ctx.arc(-11 + dc, 8 - Math.max(0, -step) * 2, 2.5, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(11 + dc, 8 - Math.max(0, step) * 2, 2.5, 0, Math.PI * 2); ctx.fill()
+      // feet: alternating lift + a slight lead toward the move direction
       ctx.fillStyle = 'rgba(255,255,255,0.85)'
-      roundRect(ctx, -8.5, 13.5 - Math.max(0, step) * 2.2, 6, 4.5, 2); ctx.fill()
-      roundRect(ctx, 2.5, 13.5 - Math.max(0, -step) * 2.2, 6, 4.5, 2); ctx.fill()
+      roundRect(ctx, -8.5 + dc * 1.2, 13.5 - Math.max(0, step) * 2.8, 6, 4.5, 2); ctx.fill()
+      roundRect(ctx, 2.5 + dc * 1.2, 13.5 - Math.max(0, -step) * 2.8, 6, 4.5, 2); ctx.fill()
     }
 
     ctx.restore()
