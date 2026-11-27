@@ -284,6 +284,7 @@ export class Game {
     const c = this.particles.tileCenter(p.col, p.row)
     this.particles.dust(c.x, c.y)
     audio.play('bomb')
+    haptic(12, 0.4, 0.3) // light tactile "drop" thump
   }
 
   updatePlayers(dt: number, inputs: { dir: Dir | null; bomb: boolean; detonate: boolean }[]) {

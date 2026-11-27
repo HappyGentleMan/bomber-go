@@ -1,4 +1,5 @@
 import { audio } from './audio'
+import { haptic } from './game'
 import { settings, updateSettings, getScores, isHighScore, addScore } from './storage'
 import { PLAYER_COLORS, CHARACTERS } from './constants'
 import { drawCharBody } from './render'
@@ -27,6 +28,7 @@ export class UI {
         audio.ensure()
         const a = (btn as HTMLElement).dataset.action!
         audio.play('menuSelect')
+        haptic(8, 0.3, 0.2) // light confirm tick
         // a clicked menu button becomes the keyboard selection — no stale highlight
         const menu = (btn as HTMLElement).closest('.menu')
         if (menu) {
