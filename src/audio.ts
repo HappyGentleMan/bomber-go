@@ -232,7 +232,11 @@ class AudioEngine {
     const spb = 60 / bpm / 2 // seconds per 8th note
     const bassArr = this.track === 'menu' ? AudioEngine.MENU_BASS : this.track === 'battle' ? AudioEngine.BATTLE_BASS : AudioEngine.GAME_BASS
     const leadArr = this.track === 'menu' ? AudioEngine.MENU_LEAD : this.track === 'battle' ? AudioEngine.BATTLE_LEAD : AudioEngine.GAME_LEAD
-    while (this.musicNext < this.ctx.currentTime + 0.12) {
+    // background-tab timer throttling can leave musicNext far in the past — snap
+    // forward rather than firing a burst of catch-up notes all at once on return
+    if (this.musicNext < this.ctx.currentTime - 0.25) this.musicNext = this.ctx.currentTime
+    let guard = 0
+    while (this.musicNext < this.ctx.currentTime + 0.12 && guard++ < 8) {
       const s = this.musicStep % 16
       const when = this.musicNext - this.ctx.currentTime
       const bass = bassArr[s]

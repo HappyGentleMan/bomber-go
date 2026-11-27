@@ -84,6 +84,7 @@ export interface EnemyState {
   moveTimer: number
   aiTimer: number
   hp: number
+  hitUntil?: number // brief immunity after a non-lethal flame hit (hp>1 enemies)
   alive: boolean
   frozen: boolean
   deadAt: number

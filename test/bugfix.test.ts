@@ -89,5 +89,27 @@ console.log('— M4: gamepad bomb is edge-triggered, not auto-fire —')
   setPads([])
 }
 
+console.log('— M5: hp>1 enemies take two flame hits (dot is truthful) —')
+{
+  const g = new Game('campaign', { p1Color: '#00e5ff', p1Char: 'bomber' })
+  g.enemies.length = 0
+  const e = { id: 1, type: 'kondoria', col: 5, row: 5, x: 5, y: 5, prevX: 5, prevY: 5, dir: 0, moving: false, movingDir: null, tx: 5, ty: 5, moveTimer: 0, aiTimer: 0, hp: 2, alive: true, frozen: false, deadAt: 0, born: 0, seed: 0.5 } as any
+  g.enemies.push(e)
+  g.freezeUntil = g.time + 10 // hold enemies still so the flame tile is stable
+  g.flames.push({ col: 5, row: 5, dir: -1, ttl: 0.4, seed: 0 } as any)
+  g.updateEnemies(1 / 60)
+  check('hp2 enemy survives the first flame (hp drops to 1)', e.alive === true && e.hp === 1)
+}
+
+console.log('— M10: fire consumes an item dropped on a burning tile —')
+{
+  const g = new Game('campaign', { p1Color: '#00e5ff', p1Char: 'bomber' })
+  g.powerups.length = 0
+  g.powerups.push({ col: 5, row: 5, kind: 'bomb', born: 0, revealed: true } as any)
+  g.flames.push({ col: 5, row: 5, dir: -1, ttl: 0.4, seed: 0 } as any)
+  g.updateFlames(1 / 60)
+  check('item on a burning tile is consumed', g.powerups.length === 0)
+}
+
 if (failures) { console.log(`\n${failures} FAILURE(S)`); process.exit(1) }
 console.log('\nALL BUGFIX TESTS PASSED')

@@ -41,6 +41,7 @@ export class FloatingMove {
   private cx = 0
   private cy = 0
   private style: MoveStyle
+  private curDir: Dir | null = null
   private readonly radius = 66 // base is 132px
   private readonly travel = 40 // knob max travel from centre
   private readonly dead = 12
@@ -71,6 +72,7 @@ export class FloatingMove {
     this.pointerId = null
     this.base.classList.add('hidden')
     this.knob.style.transform = 'translate(0px, 0px)'
+    this.curDir = null
     this.lit(null)
     this.onDir(null)
   }
@@ -78,7 +80,7 @@ export class FloatingMove {
   setStyle(style: MoveStyle) {
     this.style = style
     this.base.classList.toggle('as-dpad', style === 'dpad')
-    if (this.active) this.lit(quantizeDir(0, 0, this.dead)) // refresh visuals; keep current dir
+    if (this.active) this.lit(this.curDir) // keep the committed direction lit across a style swap
   }
 
   destroy() {
@@ -123,6 +125,7 @@ export class FloatingMove {
     this.pointerId = null
     this.base.classList.add('hidden')
     this.knob.style.transform = 'translate(0px, 0px)'
+    this.curDir = null
     this.lit(null)
     this.onDir(null)
   }
@@ -137,6 +140,7 @@ export class FloatingMove {
       this.knob.style.transform = `translate(${kx}px, ${ky}px)`
     }
     const d = quantizeDir(rawX, rawY, this.dead)
+    this.curDir = d
     this.lit(d)
     this.onDir(d)
   }

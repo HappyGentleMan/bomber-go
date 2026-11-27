@@ -68,7 +68,6 @@ export class UI {
     const applyMove = () => {
       move.classList.toggle('on', settings.moveStyle === 'joystick')
       moveLabel.textContent = settings.moveStyle === 'joystick' ? 'MOVE: JOYSTICK' : 'MOVE: D-PAD'
-      document.body.classList.toggle('joy', settings.moveStyle === 'joystick')
     }
     move.addEventListener('click', () => {
       settings.moveStyle = settings.moveStyle === 'joystick' ? 'dpad' : 'joystick'

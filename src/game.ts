@@ -589,12 +589,20 @@ export class Game {
       // derive the tile the enemy occupies (flame check, AI, rendering)
       e.col = Math.round(e.x); e.row = Math.round(e.y)
     }
-    // flame deaths
+    // flame deaths — hp>1 enemies (the "tough" dot) shrug off the first flame
+    // and need a second separate blast; a brief hit cooldown stops one lingering
+    // flame from counting twice on the same tile.
     const flame = this.flameSet()
     for (const e of this.enemies) {
-      if (e.alive && flame.has(key(e.col, e.row))) {
-        this.killEnemy(e, null, false)
-      }
+      if (!e.alive || !flame.has(key(e.col, e.row))) continue
+      if ((e.hitUntil ?? 0) > this.time) continue
+      e.hp--
+      if (e.hp <= 0) { this.killEnemy(e, null, false); continue }
+      e.hitUntil = this.time + 0.6
+      const cx = e.x * 48 + 24, cy = e.y * 48 + 24
+      this.particles.burst(cx, cy, '#ffffff', 6, 90)
+      this.particles.text(cx, cy - 12, 'TOUGH!', '#ffffff')
+      audio.play('kick')
     }
   }
 
@@ -920,6 +928,12 @@ export class Game {
     for (let i = this.flames.length - 1; i >= 0; i--) {
       this.flames[i].ttl -= dt
       if (this.flames[i].ttl <= 0) this.flames.splice(i, 1)
+    }
+    // fire consumes items on burning tiles — covers items dropped by flame-killed
+    // enemies AFTER the detonation-time sweep already ran
+    if (this.flames.length) {
+      const fs = this.flameSet()
+      this.powerups = this.powerups.filter(u => !fs.has(key(u.col, u.row)))
     }
   }
 
