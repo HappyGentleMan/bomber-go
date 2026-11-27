@@ -503,6 +503,7 @@ ui.onAction = (action: string) => {
       if (from === 'online' && !net.connected) leaveNet()
       // a finished game (over/battleover) needs a fresh attract, not just the overlay
       if (from === 'over' || from === 'battleover') toTitle()
+      else if (from === 'pause') resume()
       else { ui.show('title'); ui.menuIndex = 0; audio.setTrack('menu') }
       break
     }
@@ -526,9 +527,7 @@ input.onTogglePause = () => {
 input.onMenuNav = (d) => {
   // the level-clear panel: any confirm key continues
   if (ui.screen === 'clear') { if (d === 'ok') ui.show(null); return }
-  if (appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings') {
-    if (ui.screen === 'pause') return
-    if (ui.screen === 'over') return
+  if (appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings' || ui.screen === 'pause' || ui.screen === 'over' || ui.screen === 'battleover') {
     ui.menuNav(d)
   }
 }
@@ -564,6 +563,7 @@ const floatingMove = new FloatingMove(
   settings.moveStyle,
 )
 ui.onMoveStyleChange = (s) => floatingMove.setStyle(s)
+window.addEventListener('resize', () => floatingMove.release()) // orientation/resize releases any active touch
 
 document.getElementById('t-pause')!.addEventListener('touchstart', (e) => {
   e.preventDefault()
@@ -657,8 +657,8 @@ function loop(now: number) {
   document.body.classList.toggle('ingame', appState === 'playing' && ui.screen !== 'clear')
 
   // menu keyboard mode (the level-clear panel also takes confirm keys)
-  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings' || ui.screen === 'clear'
-  input.inMenu = inMenu && !ui.screen?.startsWith('over')
+  const inMenu = appState === 'title' || ui.screen === 'battle' || ui.screen === 'online' || ui.screen === 'scores' || ui.screen === 'settings' || ui.screen === 'clear' || ui.screen === 'pause' || ui.screen === 'over' || ui.screen === 'battleover'
+  input.inMenu = inMenu
 
   if (game && appState !== 'paused' && !matchOver && ui.screen !== 'clear') {
     acc += dt

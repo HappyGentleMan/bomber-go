@@ -12,6 +12,23 @@ export function quantizeDir(dx: number, dy: number, dead: number): Dir | null {
 
 export type MoveStyle = 'joystick' | 'dpad'
 
+/** Clamp the floating base origin so the WHOLE base stays inside the move zone
+ *  (never over the play field — a spec anti-goal) and on screen. If the zone is
+ *  narrower than the base on an axis, fall back to the zone centre. Pure. */
+export function clampBaseOrigin(
+  px: number, py: number, r: number,
+  zone: { left: number; top: number; right: number; bottom: number },
+  screenW: number, screenH: number,
+): { cx: number; cy: number } {
+  const loX = Math.max(zone.left + r, r)
+  const hiX = Math.min(zone.right - r, screenW - r)
+  const loY = Math.max(zone.top + r, r)
+  const hiY = Math.min(zone.bottom - r, screenH - r)
+  const cx = hiX >= loX ? Math.min(Math.max(px, loX), hiX) : (zone.left + zone.right) / 2
+  const cy = hiY >= loY ? Math.min(Math.max(py, loY), hiY) : (zone.top + zone.bottom) / 2
+  return { cx, cy }
+}
+
 /** Floating-origin movement control. The base spawns wherever the thumb first
  *  touches inside `zone` (no fixed target to hunt for), drags steer with a hard
  *  4-direction snap, release stops. One pointer owns it — a second finger is
@@ -42,6 +59,20 @@ export class FloatingMove {
     zone.addEventListener('pointermove', this.move)
     zone.addEventListener('pointerup', this.up)
     zone.addEventListener('pointercancel', this.up)
+    zone.addEventListener('lostpointercapture', this.release)
+    window.addEventListener('blur', this.release)
+  }
+
+  /** force-release any active touch — blur / resize / lost-capture safety so a
+   *  direction can never stick when the pointer stream is interrupted */
+  release = () => {
+    if (!this.active) return
+    this.active = false
+    this.pointerId = null
+    this.base.classList.add('hidden')
+    this.knob.style.transform = 'translate(0px, 0px)'
+    this.lit(null)
+    this.onDir(null)
   }
 
   setStyle(style: MoveStyle) {
@@ -55,6 +86,8 @@ export class FloatingMove {
     this.zone.removeEventListener('pointermove', this.move)
     this.zone.removeEventListener('pointerup', this.up)
     this.zone.removeEventListener('pointercancel', this.up)
+    this.zone.removeEventListener('lostpointercapture', this.release)
+    window.removeEventListener('blur', this.release)
     this.active = false
     this.pointerId = null
     this.base.classList.add('hidden')
@@ -67,10 +100,12 @@ export class FloatingMove {
     this.active = true
     this.pointerId = e.pointerId
     try { this.zone.setPointerCapture(e.pointerId) } catch { /* synthetic pointers */ }
-    // clamp the base fully on-screen so it never spawns half off an edge
+    // clamp the base fully inside the move zone (never over the play field)
     const r = this.radius
-    this.cx = Math.min(Math.max(e.clientX, r), window.innerWidth - r)
-    this.cy = Math.min(Math.max(e.clientY, r), window.innerHeight - r)
+    const z = this.zone.getBoundingClientRect()
+    const o = clampBaseOrigin(e.clientX, e.clientY, r, z, window.innerWidth, window.innerHeight)
+    this.cx = o.cx
+    this.cy = o.cy
     this.base.style.left = `${this.cx - r}px`
     this.base.style.top = `${this.cy - r}px`
     this.base.classList.remove('hidden')
