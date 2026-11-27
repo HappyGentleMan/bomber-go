@@ -333,7 +333,7 @@
     /* portrait phones: menus use the FULL screen (the canvas is a short
        strip in portrait, so menus must not be trapped in it or they scroll) */
     @media (orientation: portrait) and (max-width: 520px) {
-      .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: auto; height: 100vh; height: 100dvh; gap: 14px; padding: 16px; justify-content: flex-end; padding-bottom: calc(22px + var(--safe-bottom)); }
+      .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: auto; height: 100vh; height: 100dvh; gap: 14px; padding: 16px; justify-content: safe center; padding-bottom: calc(16px + var(--safe-bottom)); }
       .logo { font-size: clamp(26px, 9vw, 40px); }
       .logo small { margin-top: 4px; letter-spacing: .4em; }
       .btn { min-width: min(320px, 86vw); padding: 13px 22px; font-size: 15px; }
